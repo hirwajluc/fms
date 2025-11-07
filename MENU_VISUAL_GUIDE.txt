@@ -1,0 +1,449 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    GREATER FMS - MENU VISUAL REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+MENU STRUCTURE OVERVIEW
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           HORIZONTAL MENU BAR                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  🏠 Home  |  🕐 Timesheets  |  🧾 Expenses  |  📄 Monthly Reports         │
+│           |                 |               |                             │
+│           |                 |               |  📁 Work Packages ▼         │
+│           |                 |               |     ├─ WP 1                │
+│           |                 |               |     ├─ WP 2                │
+│           |                 |               |     ├─ WP 3                │
+│           |                 |               |     ├─ WP 4                │
+│           |                 |               |     ├─ WP 5                │
+│           |                 |               |     ├─ WP 6                │
+│           |                 |               |     └─ WP 7                │
+│           |                 |               |                             │
+│           |                 |               |  ─────────────────         │
+│           |                 |               |  ADMINISTRATION             │
+│           |                 |               |  👥 Users                  │
+│           |                 |               |  👤 Staff                  │
+│           |                 |               |                             │
+│           |                 |               |  ─────────────────         │
+│           |                 |               |  ADMIN                      │
+│           |                 |               |  ⚙️  Settings ▼            │
+│           |                 |               |     ├─ System Settings    │
+│           |                 |               |     └─ Reports & Analytics│
+│           |                 |               |                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+ROLE-BASED VISIBILITY
+═══════════════════════════════════════════════════════════════════════════════
+
+STAFF MEMBER
+───────────
+🏠 Home        ✓ (can see)
+🕐 Timesheets  ✓ (can see & use)
+🧾 Expenses    ✗ (hidden)
+📄 Rpts        ✗ (hidden)
+📁 Work Pkg    ✗ (hidden)
+👥 Users       ✗ (hidden)
+👤 Staff       ✗ (hidden)
+⚙️  Settings    ✗ (hidden)
+
+
+COORDINATOR
+───────────
+🏠 Home        ✓ (can see)
+🕐 Timesheets  ✓ (can see & use all)
+🧾 Expenses    ✓ (can see own partner's only)
+📄 Rpts        ✓ (can see own partner's only)
+📁 Work Pkg    ✓ (can see)
+👥 Users       ✓ (can manage)
+👤 Staff       ✓ (can manage)
+⚙️  Settings    ✗ (hidden - admin only)
+
+
+ADMIN
+─────
+🏠 Home        ✓ (can see all)
+🕐 Timesheets  ✓ (can see & use all)
+🧾 Expenses    ✓ (can see & approve all)
+📄 Rpts        ✓ (can see & approve all)
+📁 Work Pkg    ✓ (can manage all)
+👥 Users       ✓ (can manage all)
+👤 Staff       ✓ (can manage all)
+⚙️  Settings    ✓ (can access system settings)
+
+
+SUPER ADMIN
+───────────
+🏠 Home        ✓ (full access)
+🕐 Timesheets  ✓ (full access)
+🧾 Expenses    ✓ (full access)
+📄 Rpts        ✓ (full access)
+📁 Work Pkg    ✓ (full access)
+👥 Users       ✓ (full access)
+👤 Staff       ✓ (full access)
+⚙️  Settings    ✓ (full access)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DETAILED MENU ITEMS
+═══════════════════════════════════════════════════════════════════════════════
+
+1️⃣  HOME [ti-smart-home icon]
+    Link: /
+    Access: ✓ All Roles
+    Purpose: Dashboard/Home page
+    Always Visible: Yes
+
+2️⃣  TIMESHEETS [ti-clock icon]
+    Link: /timesheets
+    Access: ✓ All Roles (Staff, Coordinator, Admin, Super Admin)
+    Active Pages:
+      - timesheets (list view)
+      - newTimesheet (create view)
+      - viewTimesheet (detail view)
+      - editTimesheet (edit view)
+    Features:
+      • Create new timesheet
+      • Import from Excel
+      • View timesheet list
+      • Edit draft/rejected timesheets
+      • Download as PDF with signature
+      • Submit for approval
+      • View approval status
+    Always Visible: Yes
+
+3️⃣  EXPENSES [ti-receipt icon]
+    Link: /expenses
+    Access: ✓ Coordinator, Admin, Super Admin
+    Access: ✗ Staff
+    Active Pages:
+      - expenses (list view)
+      - newExpense (create form)
+      - saveExpense (process form)
+    Features:
+      • Create new expense
+      • Upload supporting documents
+      • Fill in amount, category, work package
+      • Select currency (RWF, EUR, USD)
+      • Submit for approval
+      • View approval status
+      • Admin: Approve/Reject with comments
+    Restrictions:
+      • Coordinator: Can only manage own partner's expenses
+      • Admin: Can manage all expenses
+    Always Visible: No (hidden from Staff)
+
+4️⃣  MONTHLY REPORTS [ti-file-text icon]
+    Link: /monthlyReports
+    Access: ✓ Coordinator, Admin, Super Admin
+    Access: ✗ Staff
+    Active Pages:
+      - monthlyReports (list with filters)
+      - viewMonthlyReport (detail view)
+      - generateMonthlyReport (create new)
+    Features:
+      • Create monthly report (V2 - File attachment model)
+      • Upload multiple evidence files
+      • Add metadata to each file
+      • Auto-calculate totals
+      • View summaries (by category, WP, currency)
+      • Submit for approval
+      • Admin: Verify individual items
+      • Admin: Approve/Reject
+      • Download PDF/Excel with all files
+    Restrictions:
+      • Coordinator: Can only manage own partner's reports
+      • Admin: Can manage all reports
+    Always Visible: No (hidden from Staff)
+
+5️⃣  WORK PACKAGES [ti-folder icon] - DROPDOWN MENU
+    Access: ✓ Coordinator, Admin, Super Admin
+    Access: ✗ Staff
+    Submenu Items (currently placeholder):
+      • WP 1 - Management
+      • WP 2 - Collaboration
+      • WP 3 - Implementation
+      • WP 4 - Support
+      • WP 5 - Training
+      • WP 6 - Monitoring
+      • WP 7 - Evaluation
+    Purpose: View and manage work packages
+    Always Visible: No (hidden from Staff)
+
+6️⃣  USERS [ti-users icon]
+    Link: /users
+    Access: ✓ Coordinator, Admin, Super Admin
+    Access: ✗ Staff
+    Active Pages:
+      - users (list view)
+      - newUser (create form)
+      - editUser (edit form)
+    Features:
+      • Create new user accounts
+      • View all users
+      • Edit user details
+      • Manage user roles
+      • Manage permissions
+    Section: ADMINISTRATION
+    Always Visible: No (only for coordinators+)
+
+7️⃣  STAFF [ti-user-check icon]
+    Link: /staff
+    Access: ✓ Coordinator, Admin, Super Admin
+    Access: ✗ Staff
+    Active Pages:
+      - staff (list view)
+      - newStaff (create form)
+    Features:
+      • Create staff records
+      • View all staff
+      • Manage assignments
+      • Track staff details
+    Section: ADMINISTRATION
+    Always Visible: No (only for coordinators+)
+
+8️⃣  SETTINGS [ti-settings icon] - DROPDOWN MENU (ADMIN ONLY)
+    Access: ✓ Admin, Super Admin
+    Access: ✗ Coordinator, Staff
+    Submenu Items (placeholder for future):
+      • System Settings
+      • Reports & Analytics
+    Section: ADMIN
+    Always Visible: No (only for admins)
+    Note: This section is separated and only visible to Admin/Super Admin
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+MENU SECTIONS LAYOUT
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ MAIN CONTENT SECTION ─┐
+│                        │
+│ Home                   │  (All roles)
+│ Timesheets             │  (All roles)
+│ Expenses               │  (Coordinators+)
+│ Monthly Reports        │  (Coordinators+)
+│ Work Packages (dropdown)  (Coordinators+)
+│                        │
+├─ ADMINISTRATION SECTION ┤  (Header visible only to Coordinators+)
+│                        │
+│ Users                  │  (Coordinators+)
+│ Staff                  │  (Coordinators+)
+│                        │
+├─ ADMIN SECTION ────────┤  (Header visible only to Admins)
+│                        │
+│ Settings (dropdown)    │  (Admins+)
+│                        │
+└────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ICON REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+Icon Code        | Icon Name      | Used For
+─────────────────┼────────────────┼──────────────────────
+ti-smart-home    | House          | Home / Dashboard
+ti-clock         | Clock          | Timesheets
+ti-receipt       | Receipt        | Expenses
+ti-file-text     | Document       | Monthly Reports
+ti-folder        | Folder         | Work Packages
+ti-users         | Multiple Users | Users Management
+ti-user-check    | User + Check   | Staff Management
+ti-settings      | Gear           | Settings/Configuration
+ti-arrow-right   | Right Arrow    | Submenu Items
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+ACTIVE PAGE HIGHLIGHTING
+═══════════════════════════════════════════════════════════════════════════════
+
+When a user is on a specific page, that menu item is highlighted with 'active' class.
+
+TIMESHEETS is highlighted when viewing:
+  ✓ /timesheets (list)
+  ✓ /newTimesheet (create)
+  ✓ /viewTimesheet/123 (view)
+  ✓ /editTimesheet/123 (edit)
+
+EXPENSES is highlighted when viewing:
+  ✓ /expenses (list)
+  ✓ /newExpense (create)
+  ✓ /saveExpense (process)
+
+MONTHLY REPORTS is highlighted when viewing:
+  ✓ /monthlyReports (list)
+  ✓ /viewMonthlyReport/123 (view)
+  ✓ /generateMonthlyReport (create)
+
+USERS is highlighted when viewing:
+  ✓ /users (list)
+  ✓ /newUser (create)
+  ✓ /editUser/123 (edit)
+
+STAFF is highlighted when viewing:
+  ✓ /staff (list)
+  ✓ /newStaff (create)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+QUICK ACCESS BY ROLE
+═══════════════════════════════════════════════════════════════════════════════
+
+STAFF MEMBER WORKFLOW:
+  1. Login
+  2. Click "Timesheets" from menu
+  3. View own timesheets
+  4. Create new timesheet or edit draft ones
+  5. Download PDF with signature
+  6. Submit for approval
+  7. Check approval status
+
+COORDINATOR WORKFLOW:
+  1. Login
+  2. Navigate through menu:
+     - Home (dashboard)
+     - Timesheets (view all for partner)
+     - Expenses (create/view own partner's)
+     - Monthly Reports (create/view own partner's)
+     - Users (manage partner users)
+     - Staff (manage partner staff)
+
+ADMIN WORKFLOW:
+  1. Login
+  2. Navigate through menu:
+     - Home (system dashboard)
+     - Timesheets (view/approve all)
+     - Expenses (review/approve all)
+     - Monthly Reports (review/approve all)
+     - Users (manage all users)
+     - Staff (manage all staff)
+     - Settings (system configuration)
+
+SUPER ADMIN WORKFLOW:
+  1. Login
+  2. Full access to all menu items
+  3. Can perform any action in the system
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+CODE IMPLEMENTATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Location: application/views/pages/menu.php
+
+Access Control Pattern:
+  
+  <?php if($this->auth_manager->is_super_admin() ||
+          $this->auth_manager->is_admin() ||
+          $this->auth_manager->is_coordinator()): ?>
+    <!-- Menu item visible only to these roles -->
+  <?php endif; ?>
+
+Active Page Detection:
+  
+  <?=($this->router->fetch_method()=='expenses' ||
+      $this->router->fetch_method()=='newExpense')?'active':'';?>
+  
+  This applies 'active' class when on those pages
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+INTERNATIONALIZATION (i18n) KEYS
+═══════════════════════════════════════════════════════════════════════════════
+
+Key                      | Display Text
+─────────────────────────┼──────────────────────
+Home                     | Home
+Timesheets               | Timesheets
+Expenses                 | Expenses
+MonthlyReports           | Monthly Reports
+WorkPackages             | Work Packages
+WP1                      | WP 1 - Management
+WP2                      | WP 2 - Collaboration
+WP3                      | WP 3 - Implementation
+WP4                      | WP 4 - Support
+WP5                      | WP 5 - Training
+WP6                      | WP 6 - Monitoring
+WP7                      | WP 7 - Evaluation
+Users                    | Users
+Staff                    | Staff
+Settings                 | Settings
+SystemSettings           | System Settings
+Reports                  | Reports & Analytics
+Administration           | (section header)
+Admin                    | (section header)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+TESTING CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+☐ Staff user login:
+  ☐ Sees: Home, Timesheets
+  ☐ Does NOT see: Expenses, Monthly Reports, Work Packages, Users, Staff, Settings
+
+☐ Coordinator login:
+  ☐ Sees: All main items (Home, Timesheets, Expenses, Monthly Reports, Work Pkg)
+  ☐ Sees: Administration section (Users, Staff)
+  ☐ Does NOT see: Settings
+
+☐ Admin login:
+  ☐ Sees: All items including Settings
+  ☐ Can access all admin functions
+
+☐ Super Admin login:
+  ☐ Sees: All items
+  ☐ Has full system access
+
+☐ Active page highlighting:
+  ☐ Timesheets highlights when on /timesheets
+  ☐ Expenses highlights when on /expenses
+  ☐ Monthly Reports highlights when on /monthlyReports
+
+☐ Dropdown menus:
+  ☐ Work Packages dropdown toggles
+  ☐ Settings dropdown toggles (admin only)
+
+☐ Links work correctly:
+  ☐ Each menu item links to correct page
+  ☐ Submenu items are clickable
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+Total Menu Items:           10
+  • Always Visible:         2 (Home, Timesheets)
+  • Coordinator+ Visible:   5 (Expenses, Monthly Reports, Work Packages, Users, Staff)
+  • Admin+ Only:            1 (Settings)
+
+Menu Sections:              3
+  • Main Content:           5 items
+  • Administration:         2 items
+  • Admin Only:             1 dropdown
+
+Role-Based Access:          4 levels
+  • Staff:                  Limited (Home, Timesheets only)
+  • Coordinator:            Full (Expenses, Reports, Users, Staff)
+  • Admin:                  Very Full (+ Settings, approval authority)
+  • Super Admin:            Complete (all features)
+
+Icons:                      8 distinct icons used
+Dropdowns:                  2 (Work Packages, Settings)
+
+File Location: application/views/pages/menu.php
+Last Updated: November 2024
+Version: 1.0 (Complete restructure with all new features)
+
+═══════════════════════════════════════════════════════════════════════════════

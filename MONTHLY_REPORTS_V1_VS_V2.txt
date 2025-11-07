@@ -1,0 +1,398 @@
+═══════════════════════════════════════════════════════════════════════════════
+                   MONTHLY REPORTS: V1 vs V2 COMPARISON
+═══════════════════════════════════════════════════════════════════════════════
+
+V1 ARCHITECTURE (What was implemented)
+──────────────────────────────────────────────────────────────────────────────
+
+Flow:
+  Approved Expenses Table → Aggregation → Monthly Report (View)
+
+Database:
+  monthly_financial_reports       (main report)
+  monthly_report_items            (aggregated expenses)
+  monthly_report_summary_wp       (by work package)
+  monthly_report_summary_category (by category)
+  monthly_report_summary_currency (by currency)
+
+How It Works:
+  1. Click "Generate Monthly Report"
+  2. System finds all APPROVED expenses for Nov 2024
+  3. Creates report and automatically aggregates them
+  4. Shows totals from aggregated data
+  5. Submit → Approve → View (cannot add more items)
+
+Data Source:
+  ✗ No file uploads
+  ✗ No additional documents
+  ✓ Only aggregated expense data
+
+Example:
+  System finds 15 approved expenses with amounts
+  Totals them: 2,500,000 RWF + 1,500 EUR + 2,000 USD
+  Shows breakdown by category, WP, currency
+  Cannot add more items after creation
+
+Problem:
+  User needs to upload EVIDENCE FILES along with the report
+  V1 doesn't support file attachments
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+V2 ARCHITECTURE (New Design - Like Timesheet)
+──────────────────────────────────────────────────────────────────────────────
+
+Flow:
+  Create Report → Upload Files → Auto-Calculate → View → Export (PDF/Excel)
+
+Database:
+  monthly_financial_reports_v2    (main report header)
+  monthly_report_attachments      (uploaded files - LIKE TIMESHEET ROWS)
+  monthly_report_summary          (overall totals)
+  monthly_report_category_summary (by category)
+  monthly_report_wp_summary       (by work package)
+  monthly_report_currency_summary (by currency)
+
+How It Works:
+  1. Click "Create New Monthly Report"
+     - Select Partner, Month, Year
+     - Report created in DRAFT status
+  
+  2. Upload Evidence Files (one by one)
+     - Upload: Receipt_Travel.pdf
+     - Metadata: 150,000 RWF, Travel, WP1, Nov 15
+     - Upload: Hotel_Invoice.pdf
+     - Metadata: 450,000 RWF, Accommodation, WP2, Nov 16
+     - ... upload 13 more files ...
+  
+  3. System AUTO-CALCULATES:
+     - Total RWF: 2,500,000
+     - Total EUR: 1,500
+     - Total USD: 2,000
+     - Breakdown by category, WP, currency
+  
+  4. Submit → Review → Approve → Download PDF/Excel
+
+Data Source:
+  ✓ File uploads (PDF, Excel, Word, etc)
+  ✓ Metadata per file (amount, category, WP, date)
+  ✓ Original files stored on disk
+  ✓ Files available in PDF/Excel export
+
+Example:
+  User uploads 15 files with amounts
+  Each file has: name, amount, currency, category, WP, date
+  System totals them: 2,500,000 RWF + 1,500 EUR + 2,000 USD
+  Admin can verify individual files
+  Can download PDF/Excel with all files attached
+
+Advantage:
+  ✓ Files as evidence
+  ✓ User controls what gets included
+  ✓ Flexible data structure
+  ✓ Like timesheet system (familiar pattern)
+  ✓ Can verify individual items
+  ✓ Complete audit trail
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+SIDE-BY-SIDE COMPARISON TABLE
+═══════════════════════════════════════════════════════════════════════════════
+
+Feature                    V1                      V2
+─────────────────────────────────────────────────────────────────────────────
+Data Source               Approved Expenses       User Uploads Files
+File Attachments          ✗ None                  ✓ Yes (PDF, Excel, etc)
+Item Creation             Auto-generated          User-controlled
+Item Count                Fixed (from expenses)   Flexible (as many as needed)
+Metadata Structure        Fixed (expense fields)  Custom (amount, category, etc)
+Edit After Submit         ✗ No                    ✓ Yes (if rejected)
+Item Verification         N/A                     ✓ Admin can verify individually
+Adding Items              ✗ Cannot add            ✓ Can add/delete/edit (draft)
+File Storage              None                    ✓ On disk, in database
+Evidence Proof            Low (aggregate only)    High (all files included)
+PDF/Excel Contents        Summary only            Summary + Attachments
+Similar To                Expense aggregation     Timesheet system
+
+Recommendation:
+  V2 is better suited for your needs because:
+  1. Matches user workflow (create report, add files)
+  2. Similar to timesheet system (familiar pattern)
+  3. Supports evidence file attachments
+  4. User has control over content
+  5. Can verify individual items
+  6. Better audit trail
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DATABASE SCHEMA COMPARISON
+═══════════════════════════════════════════════════════════════════════════════
+
+V1 Tables:
+  ├── monthly_financial_reports
+  │   ├── report_id
+  │   ├── partner_id
+  │   ├── report_month/year
+  │   ├── status
+  │   ├── total_amount_rwf/eur/usd
+  │   └── audit trail
+  │
+  ├── monthly_report_items (aggregated expenses)
+  │   ├── item_id
+  │   ├── report_id
+  │   ├── expense_id (from expenses table)
+  │   ├── category, work_package, amount
+  │   └── expense_date
+  │
+  └── Summary tables (wp, category, currency)
+
+V2 Tables:
+  ├── monthly_financial_reports_v2
+  │   ├── report_id
+  │   ├── partner_id
+  │   ├── report_month/year
+  │   ├── description
+  │   ├── status
+  │   └── audit trail
+  │
+  ├── monthly_report_attachments (file uploads - LIKE TIMESHEET ROWS)
+  │   ├── attachment_id
+  │   ├── report_id
+  │   ├── original_filename
+  │   ├── saved_filename
+  │   ├── file_path
+  │   ├── file_size, file_type
+  │   ├── item_name, item_description, item_type
+  │   ├── document_date, amount, currency
+  │   ├── category, work_package
+  │   ├── uploaded_by, uploaded_at
+  │   ├── verified, verified_by (admin verification)
+  │   └── verification_notes
+  │
+  ├── monthly_report_summary (overall totals)
+  │   ├── summary_id
+  │   ├── report_id
+  │   ├── total_items
+  │   ├── total_verified
+  │   ├── total_amount_rwf/eur/usd
+  │   └── pdf_path, excel_path
+  │
+  └── Summary tables (wp, category, currency)
+
+Key Difference:
+  V1: monthly_report_items = aggregated expenses (read-only)
+  V2: monthly_report_attachments = uploaded files (editable, with verification)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+WORKFLOW COMPARISON
+═══════════════════════════════════════════════════════════════════════════════
+
+V1 Workflow:
+┌─────────────────────────────────────┐
+│ Go to Monthly Reports               │
+│        ↓                            │
+│ Click "Generate Report"             │
+│        ↓                            │
+│ Select Partner, Month, Year         │
+│        ↓                            │
+│ System finds approved expenses      │
+│        ↓                            │
+│ Creates report with aggregated data │
+│        ↓                            │
+│ View report (read-only)             │
+│        ↓                            │
+│ Submit → Approve → View/Export      │
+└─────────────────────────────────────┘
+
+Time to create: ~1 second
+Files included: None
+Data flexibility: Low
+
+
+V2 Workflow:
+┌────────────────────────────────────────────┐
+│ Go to Monthly Reports                      │
+│        ↓                                   │
+│ Click "Create New Report"                  │
+│        ↓                                   │
+│ Select Partner, Month, Year, Description  │
+│        ↓                                   │
+│ Report created (DRAFT status)              │
+│        ↓                                   │
+│ Upload Evidence Files (repeat 15x)         │
+│  ├─ Upload file: Receipt_Travel.pdf       │
+│  ├─ Fill metadata: 150K RWF, Travel, WP1 │
+│  ├─ Click "Add Item"                      │
+│  ├─ System auto-calculates totals         │
+│  └─ Repeat for more files...              │
+│        ↓                                   │
+│ View report with all files + summaries     │
+│        ↓                                   │
+│ Submit → Admin Review → Approve/Reject    │
+│        ↓                                   │
+│ If approved: Download PDF/Excel            │
+│ If rejected: Edit files, resubmit         │
+└────────────────────────────────────────────┘
+
+Time to create: ~10-20 seconds per file upload
+Files included: Yes (all uploaded files)
+Data flexibility: High
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+EXAMPLE OUTPUT COMPARISON
+═══════════════════════════════════════════════════════════════════════════════
+
+V1 PDF Output:
+  [Summary Tables - Aggregated Data Only]
+  ├─ Work Package Summary
+  ├─ Category Summary
+  ├─ Currency Summary
+  └─ Detailed Items List
+
+  Size: 5-10 pages
+  Contents: Numbers/aggregation only
+
+
+V2 PDF Output:
+  [Summary + All Evidence Files]
+  ├─ Report Header & Summaries
+  │  ├─ Total amounts
+  │  ├─ Category breakdown
+  │  ├─ WP breakdown
+  │  ├─ Currency breakdown
+  │
+  ├─ Detailed Items Table
+  │  ├─ Item names
+  │  ├─ Amounts and currencies
+  │  ├─ Categories and WPs
+  │  └─ Document dates
+  │
+  └─ Attachments Appendix
+     ├─ Receipt_Travel.pdf (pages 5-6)
+     ├─ Hotel_Invoice.pdf (pages 7-8)
+     ├─ Permit_Document.xlsx (pages 9-15)
+     └─ ... all 15 files included ...
+
+  Size: 37 pages (like the example file)
+  Contents: Summary + all evidence files
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+MIGRATION PATH (If you want to switch from V1 to V2)
+═══════════════════════════════════════════════════════════════════════════════
+
+Option 1: Start Fresh with V2
+  - Use V2 database schema
+  - Delete V1 tables (optional backup)
+  - Start creating new reports with V2
+  - Existing V1 reports stay as-is (or migrate manually)
+
+Option 2: Keep Both (Parallel)
+  - Keep V1 tables for existing reports
+  - Use V2 for new reports
+  - V1 shows aggregated data
+  - V2 shows file-based reports
+  - Can access both
+
+Option 3: Migrate V1 → V2
+  - Convert V1 reports to V2 format
+  - For each V1 report:
+    1. Create V2 report
+    2. For each aggregated item, create attachment
+    3. Recalculate summaries
+  - Requires custom migration script
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+RECOMMENDATION
+═══════════════════════════════════════════════════════════════════════════════
+
+CHOOSE V2 IF:
+  ✓ You want to upload evidence files
+  ✓ You need PDF/Excel with actual documents
+  ✓ You want flexible data structure
+  ✓ You like the timesheet system pattern
+  ✓ You need individual item verification
+  ✓ You want user control over content
+  ✓ You need complete audit trail
+
+CHOOSE V1 IF:
+  ✓ You only need aggregated numbers
+  ✓ You don't need file attachments
+  ✓ You want auto-generation from expenses
+  ✓ You prefer simplicity
+
+VERDICT: V2 is recommended for your use case
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT'S PROVIDED FOR V2
+═══════════════════════════════════════════════════════════════════════════════
+
+1. MONTHLY_REPORTS_MIGRATION_V2.sql
+   - Complete database schema
+   - Ready to execute in MySQL
+   - Includes test data examples
+   - Rollback script included
+
+2. MONTHLY_REPORTS_MODEL_V2.php
+   - 15 model methods
+   - Ready to copy into Fms_model_enhanced.php
+   - Includes all CRUD operations
+   - Auto-calculation logic
+
+3. MONTHLY_REPORTS_V2_ARCHITECTURE.md
+   - Complete documentation
+   - Database schema details
+   - Workflow diagrams
+   - Method signatures
+   - Examples and use cases
+
+4. MONTHLY_REPORTS_V2_SUMMARY.md
+   - This summary document
+   - User workflow examples
+   - Implementation timeline
+   - File checklist
+
+═══════════════════════════════════════════════════════════════════════════════
+
+NEXT STEPS
+═══════════════════════════════════════════════════════════════════════════════
+
+To implement V2:
+
+1. Execute the migration:
+   mysql -u user -p database < MONTHLY_REPORTS_MIGRATION_V2.sql
+
+2. Add model methods:
+   Copy from MONTHLY_REPORTS_MODEL_V2.php into:
+   application/models/Fms_model_enhanced.php
+
+3. Implement controllers:
+   Create file upload handling
+   Create report management endpoints
+   Implement approval workflow
+
+4. Create views:
+   List view (like timesheets)
+   Detail view (with file upload form)
+   Upload form modal
+
+5. Implement PDF/Excel generation:
+   Use existing DOMPDF (for PDF)
+   Use existing PhpSpreadsheet (for Excel)
+
+6. Test and deploy
+
+═══════════════════════════════════════════════════════════════════════════════
+

@@ -1,0 +1,31 @@
+# CodeIgniter specific files
+system/session/*
+!system/session/.gitkeep
+system/logs/*
+!system/logs/.gitkeep
+
+# User uploads and temporary files
+assets/uploads/*
+!assets/uploads/.gitkeep
+
+# Database backups
+*.sql
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# PHP files that shouldn't be committed
+.htaccess
+
+# Composer
+composer.lock
+vendor/
+
+# Environment files
+.env
+.env.local
