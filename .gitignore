@@ -4,9 +4,7 @@ system/session/*
 system/logs/*
 !system/logs/.gitkeep
 
-# User uploads and temporary files
-assets/uploads/*
-!assets/uploads/.gitkeep
+
 
 # Database backups
 *.sql
@@ -19,12 +17,6 @@ assets/uploads/*
 *.swo
 *~
 
-# PHP files that shouldn't be committed
-.htaccess
-
-# Composer
-composer.lock
-vendor/
 
 # Environment files
 .env
