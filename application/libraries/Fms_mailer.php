@@ -9,7 +9,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *   $this->fms_mailer->timesheet_submitted($ts, $submitter_name, $recipient_emails);
  *   … etc.
  */
-class FMS_Mailer {
+class Fms_mailer {
 
     protected $CI;
 
