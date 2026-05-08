@@ -42,6 +42,7 @@
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/node-waves/node-waves.css" />
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/typeahead-js/typeahead.css" />
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/select2/select2.css" />
+    <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/flatpickr/flatpickr.css" />
 
     <!-- Page CSS -->
 
@@ -72,7 +73,7 @@
             <!-- Content -->
 
             <div class="container-xxl flex-grow-1 container-p-y">
-              <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Users /</span> New User</h4>
+              <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Staff /</span> New Staff Member</h4>
 
               <?php if($this->session->flashdata('success')): ?>
               <div class="alert alert-success alert-dismissible" role="alert">
@@ -88,13 +89,20 @@
               </div>
               <?php endif; ?>
 
+              <?php if(validation_errors()): ?>
+              <div class="alert alert-danger alert-dismissible" role="alert">
+                <?=validation_errors();?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+              <?php endif; ?>
+
               <div class="row">
                 <!-- Form -->
                 <div class="col-12">
                   <div class="card">
-                    <h5 class="card-header">Create New User Account</h5>
+                    <h5 class="card-header">Create New Staff Member</h5>
                     <div class="card-body">
-                      <form id="newUserForm" class="row g-3" action="<?=base_url();?>saveUser" method="POST">
+                      <form id="newStaffForm" class="row g-3" action="<?=base_url();?>saveStaff" method="POST">
 
                         <div class="col-12">
                           <h6 class="fw-semibold">1. Personal Information</h6>
@@ -109,6 +117,7 @@
                             name="first_name"
                             class="form-control"
                             placeholder="First Name"
+                            value="<?=set_value('first_name');?>"
                             required />
                         </div>
 
@@ -120,6 +129,7 @@
                             name="last_name"
                             class="form-control"
                             placeholder="Last Name"
+                            value="<?=set_value('last_name');?>"
                             required />
                         </div>
 
@@ -130,23 +140,24 @@
                             id="email"
                             name="email"
                             class="form-control"
-                            placeholder="user@example.com"
+                            placeholder="staff@example.com"
+                            value="<?=set_value('email');?>"
                             required />
                         </div>
 
                         <div class="col-md-6">
-                          <label class="form-label" for="position">Position/Title *</label>
+                          <label class="form-label" for="phone">Phone Number</label>
                           <input
                             type="text"
-                            id="position"
-                            name="position"
+                            id="phone"
+                            name="phone"
                             class="form-control"
-                            placeholder="e.g., Project Coordinator, Researcher"
-                            required />
+                            placeholder="+250 xxx xxx xxx"
+                            value="<?=set_value('phone');?>" />
                         </div>
 
                         <div class="col-12">
-                          <h6 class="mt-2 fw-semibold">2. Institution & Role</h6>
+                          <h6 class="mt-2 fw-semibold">2. Institution & Professional Details</h6>
                           <hr class="mt-0" />
                         </div>
 
@@ -161,7 +172,7 @@
                             <option value="">Select Institution</option>
                             <?php if(isset($partners) && !empty($partners)): ?>
                               <?php foreach($partners as $partner): ?>
-                                <option value="<?=$partner['partner_id'];?>"><?=$partner['name'];?></option>
+                                <option value="<?=$partner['partner_id'];?>" <?=set_select('partner_id', $partner['partner_id']);?>><?=$partner['name'];?></option>
                               <?php endforeach; ?>
                             <?php endif; ?>
                           </select>
@@ -169,77 +180,83 @@
                           <input
                             class="form-control"
                             type="text"
-                            value="<?=$this->session->userdata("fms_partner");?>"
+                            value="<?=$this->session->userdata('fms_partner');?>"
                             disabled/>
-                          <input type="hidden" name="partner_id" value="<?=$this->session->userdata("fms_partner_id");?>" />
+                          <input type="hidden" name="partner_id" value="<?=$this->session->userdata('fms_partner_id');?>" />
                           <?php endif; ?>
                         </div>
 
                         <div class="col-md-6">
-                          <label class="form-label" for="role_id">User Role *</label>
-                          <select
-                            id="role_id"
-                            name="role_id"
-                            class="form-select select2"
-                            required>
-                            <option value="">Select Role</option>
-                            <?php if(isset($roles) && !empty($roles)): ?>
-                              <?php foreach($roles as $role): ?>
-                                <?php
-                                  // Coordinators can only create members
-                                  if($this->auth_manager->is_coordinator() && $role['role_id'] != 4){
-                                    continue;
-                                  }
-                                  // Admins cannot create super admins
-                                  if($this->auth_manager->is_admin() && $role['role_id'] == 1){
-                                    continue;
-                                  }
-                                ?>
-                                <option value="<?=$role['role_id'];?>"><?=$role['role_name'];?></option>
-                              <?php endforeach; ?>
-                            <?php endif; ?>
-                          </select>
-                          <small class="text-muted">
-                            <?php if($this->auth_manager->is_coordinator()): ?>
-                            Note: Coordinators can only create Member accounts.
-                            <?php endif; ?>
-                          </small>
-                        </div>
-
-                        <div class="col-12">
-                          <h6 class="mt-2 fw-semibold">3. Account Security</h6>
-                          <hr class="mt-0" />
-                        </div>
-
-                        <div class="col-md-12">
-                          <label class="form-label" for="password">Password *</label>
+                          <label class="form-label" for="position">Position/Title *</label>
                           <input
-                            type="password"
-                            id="password"
-                            name="password"
+                            type="text"
+                            id="position"
+                            name="position"
                             class="form-control"
-                            placeholder="Minimum 6 characters"
-                            minlength="6"
+                            placeholder="e.g., Research Assistant, Lecturer"
+                            value="<?=set_value('position');?>"
                             required />
-                          <small class="text-muted">Minimum 6 characters. The user can change this password after first login.</small>
                         </div>
 
-                        <div class="col-12 mt-3">
-                          <div class="alert alert-info" role="alert">
-                            <i class="ti ti-info-circle me-2"></i>
-                            <strong>Permission Levels:</strong><br/>
-                            <ul class="mb-0 mt-2">
-                              <li><strong>Super Admin:</strong> Full system access (Central Coordinator at UNIPR)</li>
-                              <li><strong>Admin:</strong> System configuration and can view all reports</li>
-                              <li><strong>Institution Coordinator:</strong> Manages staff and approves timesheets for their institution</li>
-                              <li><strong>Member:</strong> Submits timesheets and views own data</li>
-                            </ul>
-                          </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="department">Department</label>
+                          <input
+                            type="text"
+                            id="department"
+                            name="department"
+                            class="form-control"
+                            placeholder="e.g., Computer Science, Engineering"
+                            value="<?=set_value('department');?>" />
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label" for="greater_role">GREATER Project Role</label>
+                          <input
+                            type="text"
+                            id="greater_role"
+                            name="greater_role"
+                            class="form-control"
+                            placeholder="e.g., Researcher, Developer"
+                            value="<?=set_value('greater_role');?>" />
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label" for="employee_number">Employee Number</label>
+                          <input
+                            type="text"
+                            id="employee_number"
+                            name="employee_number"
+                            class="form-control"
+                            placeholder="Staff ID/Number"
+                            value="<?=set_value('employee_number');?>" />
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label" for="hire_date">Hire Date</label>
+                          <input
+                            type="text"
+                            id="hire_date"
+                            name="hire_date"
+                            class="form-control flatpickr"
+                            placeholder="Select date"
+                            value="<?=set_value('hire_date');?>" />
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label" for="status">Status *</label>
+                          <select
+                            id="status"
+                            name="status"
+                            class="form-select"
+                            required>
+                            <option value="active" <?=set_select('status', 'active', TRUE);?>>Active</option>
+                            <option value="inactive" <?=set_select('status', 'inactive');?>>Inactive</option>
+                          </select>
                         </div>
 
                         <div class="col-12">
-                          <button type="submit" class="btn btn-primary">
-                            <i class="ti ti-user-plus me-1"></i> Create User
+                          <button type="submit" class="btn btn-success">
+                            <i class="ti ti-user-plus me-1"></i> Create Staff Member
                           </button>
                           <a href="<?=base_url();?>users" class="btn btn-secondary">
                             <i class="ti ti-x me-1"></i> Cancel
@@ -249,7 +266,6 @@
                     </div>
                   </div>
                 </div>
-                <!-- /Form -->
               </div>
             </div>
             <!--/ Content -->
@@ -305,6 +321,8 @@
 
     <!-- Vendors JS -->
     <script src="<?=base_url();?>assets/vendor/libs/select2/select2.js"></script>
+    <script src="<?=base_url();?>assets/vendor/libs/moment/moment.js"></script>
+    <script src="<?=base_url();?>assets/vendor/libs/flatpickr/flatpickr.js"></script>
 
     <!-- Main JS -->
     <script src="<?=base_url();?>assets/js/main.js"></script>
@@ -312,7 +330,14 @@
     <!-- Page JS -->
     <script>
     $(document).ready(function() {
+      // Initialize Select2
       $('.select2').select2();
+
+      // Initialize Flatpickr for date picker
+      $('.flatpickr').flatpickr({
+        dateFormat: 'Y-m-d',
+        allowInput: true
+      });
     });
     </script>
 

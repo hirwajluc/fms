@@ -57,6 +57,8 @@ $route['newExpense'] = 'fms/newExpense';
 $route['saveExpense'] = 'fms/saveExpense';
 $route['approveExpense/(:num)'] = 'fms/approveExpense/$1';
 $route['rejectExpense/(:num)'] = 'fms/rejectExpense/$1';
+$route['generateReport'] = 'fms/generateReport';
+$route['generateTimesheetReport'] = 'fms/generateTimesheetReport';
 
 // Timesheet routes
 $route['timesheets'] = 'fms/timesheets';
@@ -87,6 +89,45 @@ $route['saveUser'] = 'fms/saveUser';
 $route['editUser/(:num)'] = 'fms/editUser/$1';
 $route['updateUser/(:num)'] = 'fms/updateUser/$1';
 $route['deleteUser/(:num)'] = 'fms/deleteUser/$1';
+
+// Staff routes
+$route['newStaff'] = 'fms/newStaff';
+$route['saveStaff'] = 'fms/saveStaff';
+$route['editStaff/(:num)'] = 'fms/editStaff/$1';
+$route['updateStaff/(:num)'] = 'fms/updateStaff/$1';
+$route['deleteStaff/(:num)'] = 'fms/deleteStaff/$1';
+
+// Settings routes
+$route['reportSignatures'] = 'fms/reportSignatures';
+$route['saveSignature'] = 'fms/saveSignature';
+
+// Profile routes
+$route['profile']         = 'fms/profile';
+$route['updateProfile']   = 'fms/updateProfile';
+$route['updatePassword']  = 'fms/updatePassword';
+
+// Other File Comments routes
+$route['addFileComment']                    = 'fms/addFileComment';
+$route['deleteFileComment/(:num)']          = 'fms/deleteFileComment/$1';
+$route['getFileComments/(:num)']            = 'fms/getFileComments/$1';
+
+// Other Files routes
+$route['otherFiles']                        = 'fms/otherFiles';
+$route['otherFilesWP/(:num)']               = 'fms/otherFilesWP/$1';
+$route['uploadOtherFile']                   = 'fms/uploadOtherFile';
+$route['getFileVersions/(:num)']            = 'fms/getFileVersions/$1';
+$route['downloadOtherFileVersion/(:num)']   = 'fms/downloadOtherFileVersion/$1';
+$route['deleteOtherFile/(:num)']            = 'fms/deleteOtherFile/$1';
+
+// Forex rate lookup (AJAX)
+$route['getForexRate'] = 'fms/getForexRate';
+
+// Forex Exchange routes
+$route['forexExchange']              = 'fms/forexExchange';
+$route['saveForexRate']              = 'fms/saveForexRate';
+$route['uploadForexExcel']           = 'fms/uploadForexExcel';
+$route['deleteForexRate/(:num)']     = 'fms/deleteForexRate/$1';
+$route['downloadForexTemplate']      = 'fms/downloadForexTemplate';
 
 // Logout
 $route['logout'] = 'fms/logout';

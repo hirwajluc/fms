@@ -205,15 +205,14 @@
                             name="formAmount"
                             placeholder="Amount (Price)" />
                         </div>
-						<!--<div class="col-md-6">
-                          <label class="form-label" for="formRates">Exch. Rate</label>
-                          <input
-                            class="form-control"
-                            type="number"
-                            id="formRates"
-                            name="formRates"
-                            placeholder="Exchange Rate (Based on date of buying)" />
-                        </div>-->
+						<!-- EUR conversion preview (shows when currency=RWF) -->
+						<div class="col-md-6" id="eurConversionBox" style="display:none;">
+						  <label class="form-label">EUR Equivalent</label>
+						  <div class="card border-success bg-light p-3">
+						    <div id="eurConversionResult" class="text-success fw-bold fs-5 mb-1">—</div>
+						    <div id="eurConversionDetail" class="text-muted small"></div>
+						  </div>
+						</div>
 
 						<div class="col-md-6">
                           <label class="form-label" for="formShortDescription">Short Description</label>
@@ -322,5 +321,63 @@
 
     <!-- Page JS -->
     <script src="<?=base_url();?>assets/js/form-expenses.js"></script>
+
+    <!-- Forex live conversion -->
+    <script>
+    (function($){
+      var forexRate = null;
+
+      function tryConvert(){
+        var amount   = parseFloat($('#formAmount').val());
+        var currency = $('#formCurrency').val();
+        var date     = $('#formValidationDate').val(); // flatpickr gives YYYY/MM/DD or YYYY-MM-DD
+
+        if(currency !== 'rwf'){
+          $('#eurConversionBox').hide();
+          return;
+        }
+        $('#eurConversionBox').show();
+
+        if(!date || isNaN(amount) || amount <= 0){
+          $('#eurConversionResult').text('—');
+          $('#eurConversionDetail').text('Enter an amount and date to see the EUR equivalent.');
+          return;
+        }
+
+        // Normalise date to YYYY-MM-DD
+        var normDate = date.replace(/\//g, '-');
+
+        // Fetch rate for this date
+        $.getJSON('<?=base_url('getForexRate');?>', {date: normDate}, function(res){
+          if(res.success){
+            forexRate = res.rate;
+            var eur = amount / res.rate;
+            $('#eurConversionResult').html(
+              eur.toFixed(2) + ' <span class="fs-6">EUR</span>'
+            );
+            $('#eurConversionDetail').html(
+              'Rate on ' + res.rate_date + ': <strong>' + parseFloat(res.rate).toFixed(2) + ' RWF = 1 EUR</strong>'
+            );
+          } else {
+            forexRate = null;
+            $('#eurConversionResult').text('Rate not available');
+            $('#eurConversionDetail').text(res.message);
+          }
+        }).fail(function(){
+          $('#eurConversionResult').text('Could not fetch rate');
+          $('#eurConversionDetail').text('');
+        });
+      }
+
+      $(document).ready(function(){
+        // Currency change
+        $(document).on('change', '#formCurrency', tryConvert);
+        // Amount change
+        $(document).on('input change', '#formAmount', tryConvert);
+        // Date change — flatpickr fires a native change event on the hidden input
+        $(document).on('change input', '#formValidationDate', tryConvert);
+      });
+    })(jQuery);
+    </script>
   </body>
 </html>

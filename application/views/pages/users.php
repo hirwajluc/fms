@@ -74,7 +74,7 @@
             <!-- Content -->
 
             <div class="container-xxl flex-grow-1 container-p-y">
-              <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Users /</span> List</h4>
+              <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Administration /</span> Users & Staff</h4>
 
               <?php if($this->session->flashdata('success')): ?>
               <div class="alert alert-success alert-dismissible" role="alert">
@@ -90,11 +90,31 @@
               </div>
               <?php endif; ?>
 
-              <!-- Responsive Datatable -->
-              <div class="card">
-			  <div class="col-md-4 m-4">
-				<a href="newUser" class="btn rounded-pill me-2 btn-info"><span class="tf-icons ti-xs ti ti-user-plus me-1"></span> New User</a>
-			  </div>
+              <!-- Nav tabs -->
+              <ul class="nav nav-tabs mb-3" role="tablist">
+                <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()): ?>
+                <li class="nav-item">
+                  <button type="button" class="nav-link active" role="tab" data-bs-toggle="tab" data-bs-target="#users-tab" aria-controls="users-tab" aria-selected="true">
+                    <i class="tf-icons ti ti-users ti-xs me-1"></i> User Accounts
+                  </button>
+                </li>
+                <?php endif; ?>
+                <li class="nav-item">
+                  <button type="button" class="nav-link <?=(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin()) ? 'active' : '';?>" role="tab" data-bs-toggle="tab" data-bs-target="#staff-tab" aria-controls="staff-tab" aria-selected="<?=(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin()) ? 'true' : 'false';?>">
+                    <i class="tf-icons ti ti-user-check ti-xs me-1"></i> Staff Members
+                  </button>
+                </li>
+              </ul>
+
+              <!-- Tab content -->
+              <div class="tab-content">
+                <!-- User Accounts Tab -->
+                <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()): ?>
+                <div class="tab-pane fade show active" id="users-tab" role="tabpanel">
+                  <div class="card">
+                    <div class="col-md-4 m-4">
+                      <a href="newUser" class="btn rounded-pill me-2 btn-info"><span class="tf-icons ti-xs ti ti-user-plus me-1"></span> New User Account</a>
+                    </div>
                 <div class="card-datatable table-responsive">
                   <table class="dt-responsive table">
                     <thead>
@@ -133,7 +153,7 @@
 							<td><?=$user['email'];?></td>
 							<td><?=isset($user['partner_name']) ? $user['partner_name'] : 'N/A';?></td>
 							<td><?=$user['position'];?></td>
-							<td><span class="badge <?=$role_badge;?>"><?=$user['role_name'];?></span></td>
+							<td><span class="badge <?=$role_badge;?>"><?=ucwords(str_replace('_', ' ', $user['role_name']));?></span></td>
 							<td><span class="badge <?=$status_badge;?>"><?=ucfirst($user['status']);?></span></td>
 							<td>
 								<div class="btn-group" role="group">
@@ -158,6 +178,77 @@
                   </table>
                 </div>
               </div>
+            </div>
+            <?php endif; ?>
+            <!-- End User Accounts Tab -->
+
+            <!-- Staff Members Tab -->
+            <div class="tab-pane fade <?=(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin()) ? 'show active' : '';?>" id="staff-tab" role="tabpanel">
+              <div class="card">
+                <div class="col-md-4 m-4">
+                  <a href="newStaff" class="btn rounded-pill me-2 btn-success"><span class="tf-icons ti-xs ti ti-user-plus me-1"></span> New Staff Member</a>
+                </div>
+                <div class="card-datatable table-responsive">
+                  <table class="dt-responsive table" id="staff-table">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Partner/Institution</th>
+                        <th>Position</th>
+                        <th>Department</th>
+                        <th>GREATER Role</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php
+                        if(!empty($staff)){
+                          foreach ($staff as $member) {
+                            // Status badge
+                            $status_badge = $member['status'] == 'active' ? 'bg-success' : 'bg-danger';
+                      ?>
+                      <tr>
+                        <td></td>
+                        <td>
+                          <strong><?=$member['first_name']." ".$member['last_name'];?></strong>
+                        </td>
+                        <td><?=$member['email'];?></td>
+                        <td><?=isset($member['partner_name']) ? $member['partner_name'] : 'N/A';?></td>
+                        <td><?=$member['position'] ? $member['position'] : 'N/A';?></td>
+                        <td><?=$member['department'] ? $member['department'] : 'N/A';?></td>
+                        <td><?=$member['greater_role'] ? $member['greater_role'] : 'N/A';?></td>
+                        <td><span class="badge <?=$status_badge;?>"><?=ucfirst($member['status']);?></span></td>
+                        <td>
+                          <div class="btn-group" role="group">
+                            <a href="<?=base_url();?>editStaff/<?=$member['staff_id'];?>" class="btn btn-sm btn-primary">
+                              <i class="ti ti-edit"></i> Edit
+                            </a>
+                            <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()): ?>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteStaff(<?=$member['staff_id'];?>, '<?=$member['first_name']." ".$member['last_name'];?>')">
+                              <i class="ti ti-trash"></i> Delete
+                            </button>
+                            <?php endif; ?>
+                          </div>
+                        </td>
+                      </tr>
+                      <?php
+                          }
+                        } else {
+                          echo '<tr><td colspan="9" class="text-center">No staff members found</td></tr>';
+                        }
+                      ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <!-- End Staff Members Tab -->
+
+          </div>
+          <!-- End Tab Content -->
               <!--/ Responsive Datatable -->
             </div>
             <!--/ Content -->
@@ -226,6 +317,12 @@
     function deleteUser(userId, userName) {
         if(confirm('Are you sure you want to delete user "' + userName + '"?\n\nThis action cannot be undone.')) {
             window.location.href = '<?=base_url();?>deleteUser/' + userId;
+        }
+    }
+
+    function deleteStaff(staffId, staffName) {
+        if(confirm('Are you sure you want to delete staff member "' + staffName + '"?\n\nThis action cannot be undone.')) {
+            window.location.href = '<?=base_url();?>deleteStaff/' + staffId;
         }
     }
     </script>

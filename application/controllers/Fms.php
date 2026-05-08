@@ -15,33 +15,49 @@ class Fms extends CI_Controller {
 	}
 
 	public function index(){
-		$this->data["title"] = "FMS - Dashboard";
+		$this->data['title'] = 'FMS - Dashboard';
 
-		// Get current user info
 		$user = $this->auth_manager->get_current_user();
 		$this->data['user'] = $user;
 		$this->data['role'] = $user['role'];
 
-		// Get dashboard statistics based on role
+		// Human-readable role label (no underscores)
+		$raw_role = $this->session->userdata('fms_role_name') ?: $user['role'];
+		$this->data['role_label'] = ucwords(str_replace('_', ' ', $raw_role));
+
 		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			// Admin sees all data
-			$this->data['total_expenses'] = count($this->fmsm_enhanced->get_all_expenses());
+			$this->data['total_users']      = count($this->fmsm_enhanced->get_all_users());
+			$this->data['total_partners']   = count($this->fmsm_enhanced->get_all_partners());
+			$this->data['total_expenses']   = count($this->fmsm_enhanced->get_all_expenses());
 			$this->data['total_timesheets'] = count($this->fmsm_enhanced->get_all_timesheets());
-			$this->data['total_users'] = count($this->fmsm_enhanced->get_all_users());
-			$this->data['total_partners'] = count($this->fmsm_enhanced->get_all_partners());
-		} else if($this->auth_manager->is_coordinator()){
-			// Coordinator sees institution data
+			$this->data['total_other_files']= $this->fmsm_enhanced->count_other_files();
+
+			// Chart data
+			$this->data['chart_expense_status']    = $this->fmsm_enhanced->get_expenses_by_status();
+			$this->data['chart_expense_by_partner']= $this->fmsm_enhanced->get_expenses_by_partner();
+			$this->data['chart_files_by_wp']       = $this->fmsm_enhanced->get_other_files_by_wp();
+			$this->data['chart_timesheet_status']  = $this->fmsm_enhanced->get_timesheets_by_status();
+
+		} elseif($this->auth_manager->is_coordinator()){
 			$partner_id = $this->session->userdata('fms_partner_id');
-			$this->data['total_expenses'] = count($this->fmsm_enhanced->get_all_expenses($partner_id));
-			$this->data['total_timesheets'] = count($this->fmsm_enhanced->get_all_timesheets(NULL, $partner_id));
-			$this->data['total_users'] = count($this->fmsm_enhanced->get_all_users($partner_id));
+			$user_id    = $this->session->userdata('fms_user_id');
+			$this->data['total_users']        = count($this->fmsm_enhanced->get_all_users($partner_id));
+			$this->data['total_expenses']     = count($this->fmsm_enhanced->get_all_expenses($partner_id));
+			$this->data['total_timesheets']   = count($this->fmsm_enhanced->get_all_timesheets(NULL, $partner_id));
 			$this->data['pending_timesheets'] = count($this->fmsm_enhanced->get_all_timesheets(NULL, $partner_id, 'submitted'));
+			$this->data['total_other_files']  = $this->fmsm_enhanced->count_other_files($partner_id, $user_id);
+
+			// Chart data
+			$this->data['chart_timesheet_status'] = $this->fmsm_enhanced->get_timesheets_by_status($partner_id);
+			$this->data['chart_expense_by_wp']    = $this->fmsm_enhanced->get_expenses_by_wp($partner_id);
+			$this->data['chart_files_by_wp']      = $this->fmsm_enhanced->get_other_files_by_wp($partner_id, $user_id);
+
 		} else {
-			// Member sees own data
 			$user_id = $this->session->userdata('fms_user_id');
-			$this->data['total_timesheets'] = count($this->fmsm_enhanced->get_all_timesheets($user_id));
+			$this->data['total_timesheets']   = count($this->fmsm_enhanced->get_all_timesheets($user_id));
 			$this->data['pending_timesheets'] = count($this->fmsm_enhanced->get_all_timesheets($user_id, NULL, 'submitted'));
-			$this->data['approved_timesheets'] = count($this->fmsm_enhanced->get_all_timesheets($user_id, NULL, 'approved'));
+			$this->data['approved_timesheets']= count($this->fmsm_enhanced->get_all_timesheets($user_id, NULL, 'approved'));
+			$this->data['chart_timesheet_status'] = $this->fmsm_enhanced->get_timesheets_by_status(NULL, $user_id);
 		}
 
 		$this->load->view('pages/dashboard', $this->data);
@@ -63,6 +79,7 @@ class Fms extends CI_Controller {
 			$this->data['expenses'] = $this->fmsm_enhanced->get_all_expenses($partner_id);
 		}
 
+		$this->data['all_partners'] = $this->fmsm_enhanced->get_all_partners();
 		$this->load->view('pages/expenses', $this->data);
 	}
 
@@ -80,6 +97,7 @@ class Fms extends CI_Controller {
 			$this->data['timesheets'] = $this->fmsm_enhanced->get_all_timesheets($user_id);
 		}
 
+		$this->data['all_partners'] = $this->fmsm_enhanced->get_all_partners();
 		$this->load->view('pages/timesheets', $this->data);
 	}
 
@@ -464,7 +482,10 @@ class Fms extends CI_Controller {
 		$approver_id = $this->session->userdata('fms_user_id');
 		$comments = $this->input->post('comments');
 
-		if($this->fmsm_enhanced->approve_timesheet($timesheet_id, $approver_id, $comments)){
+		// Get approver's signature configuration
+		$signature = $this->fmsm_enhanced->get_signature_by_user_id($approver_id);
+
+		if($this->fmsm_enhanced->approve_timesheet($timesheet_id, $approver_id, $comments, $signature)){
 			$this->session->set_flashdata('success', 'Timesheet approved successfully.');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to approve timesheet.');
@@ -577,6 +598,16 @@ class Fms extends CI_Controller {
 		}
 	}
 
+	/** Returns an <img> tag with the GREATER logo embedded as base64 */
+	private function get_pdf_logo_html($max_height = '55px'){
+		$logo_path = FCPATH . 'assets/img/greater_logo.png';
+		if(file_exists($logo_path)){
+			$b64 = base64_encode(file_get_contents($logo_path));
+			return '<img src="data:image/png;base64,'.$b64.'" style="max-height:'.$max_height.';width:auto;" alt="GREATER" />';
+		}
+		return '<span style="font-weight:bold;font-size:16px;color:#696cff;">GREATER</span>';
+	}
+
 	private function generateTimesheetPDF($timesheet, $details, $summary){
 		$months = array(1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April', 5 => 'May', 6 => 'June',
 		                7 => 'July', 8 => 'August', 9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December');
@@ -593,6 +624,8 @@ class Fms extends CI_Controller {
 			'WP7' => 'WP7 - Impact and dissemination'
 		);
 
+		$logo_html = $this->get_pdf_logo_html('52px');
+
 		$html = '<!DOCTYPE html>
 		<html>
 		<head>
@@ -603,27 +636,36 @@ class Fms extends CI_Controller {
 				.container { max-width: 100%; margin: 0 auto; padding: 20px; }
 				h4 { font-size: 13px; font-weight: 600; margin-top: 20px; margin-bottom: 12px; color: #212529; }
 				h5 { font-size: 12px; font-weight: 600; margin-bottom: 10px; color: #212529; }
+				.pdf-logo-bar { display:table; width:100%; border-bottom:3px solid #696cff; padding-bottom:10px; margin-bottom:18px; }
+				.pdf-logo-bar-left { display:table-cell; vertical-align:middle; width:180px; }
+				.pdf-logo-bar-right { display:table-cell; vertical-align:middle; text-align:right; }
+				.pdf-logo-bar-right h2 { font-size:15px; color:#333; margin:0; font-weight:700; }
+				.pdf-logo-bar-right p  { font-size:9px; color:#696cff; margin:2px 0 0 0; letter-spacing:.5px; }
 
 				.card { border: 1px solid #e3e6f0; border-radius: 4px; margin-bottom: 20px; }
 				.card-header { background-color: #f8f9fa; border-bottom: 1px solid #e3e6f0; padding: 12px 15px; }
 				.card-header h5 { margin: 0; font-size: 12px; font-weight: 600; }
 				.card-body { padding: 15px; }
 
-				.row { display: flex; flex-wrap: wrap; margin: -8px; }
-				.col-md-3 { flex: 0 0 25%; padding: 8px; }
-				.col-md-12 { flex: 0 0 100%; padding: 8px; }
+				.row { display: table; width: 100%; margin-bottom: 10px; }
+				.col-md-3 { display: table-cell; width: 25%; padding: 8px; vertical-align: top; }
+				.col-md-12 { display: table-cell; width: 100%; padding: 8px; }
 
 				.info-text { margin-bottom: 8px; }
 				.info-text p { margin: 0 0 3px 0; font-size: 11px; }
 				.info-text strong { font-weight: 600; }
 
 				table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
-				thead { background-color: #f8f9fa; }
+				thead { background-color: #f8f9fa; display: table-header-group; }
 				th { border: 1px solid #dee2e6; padding: 8px; text-align: left; font-weight: 600; font-size: 10px; }
 				td { border: 1px solid #dee2e6; padding: 8px; }
 				tbody tr:nth-child(even) { background-color: #f8f9fa; }
-				tfoot { background-color: #f1f3f5; font-weight: 600; }
+				tbody tr { page-break-inside: avoid; }
+				tfoot { background-color: #f1f3f5; font-weight: 600; display: table-footer-group; }
 				tfoot th { background-color: #f1f3f5; }
+
+				/* Add margin to all pages - this creates space at top of each page */
+				@page { margin: 60px 25px 30px 25px; }
 
 				.badge { display: inline-block; padding: 4px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; }
 				.badge-success { background-color: #d4edda; color: #155724; }
@@ -636,22 +678,62 @@ class Fms extends CI_Controller {
 				.mb-1 { margin-bottom: 4px; }
 				.mt-3 { margin-top: 15px; }
 
-				.signature-section { margin-top: 30px; }
+				.signature-section { margin-top: 30px; float: right; text-align: left; width: 300px; }
 				.signature-image { max-width: 200px; max-height: 100px; margin: 15px 0; }
 				.signature-line { border-top: 1px solid #333; width: 250px; margin-top: 30px; margin-bottom: 5px; }
 				.signature-label { font-size: 9px; color: #666; }
 
 				.alert { padding: 12px 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid; }
 				.alert-info { background-color: #d1ecf1; border-left-color: #0c5460; color: #0c5460; }
+
+				/* Approved Stamp */
+				.approved-stamp {
+					position: absolute;
+					top: 15px;
+					right: 20px;
+					border: 3px solid #28a745;
+					color: #28a745;
+					font-size: 18px;
+					font-weight: bold;
+					padding: 8px 20px;
+					text-transform: uppercase;
+					border-radius: 8px;
+					opacity: 0.7;
+					transform: rotate(30deg);
+					letter-spacing: 2px;
+				}
+
+				/* Page break before Daily Entries */
+				.page-break-before {
+					page-break-before: always;
+					margin-top: 30px;
+				}
+
+				/* Position relative for stamp positioning */
+				.position-relative {
+					position: relative;
+				}
+
+				/* Add top margin to sections after page break */
+				.section-spacing {
+					margin-top: 30px;
+				}
 			</style>
 		</head>
 		<body>
 			<div class="container">
+				<!-- Logo banner -->
+				<div class="pdf-logo-bar">
+					<div class="pdf-logo-bar-left">'.$logo_html.'</div>
+					<div class="pdf-logo-bar-right">
+						<h2>Timesheet for Project Outputs</h2>
+						<p>ERASMUS+ GREATER — Growing Rwanda Energy Awareness Through highER education</p>
+					</div>
+				</div>
 				<!-- Timesheet Header Info -->
-				<div class="card">
-					<div class="card-header flex-between">
-						<h5 class="mb-0">GREATER - Timesheet for Project Outputs</h5>
-						<span class="badge badge-success">Approved</span>
+				<div class="card position-relative">
+					<div class="card-header">
+						<h5 class="mb-0">Staff Information</h5>
 					</div>
 					<div class="card-body">
 						<div class="row">
@@ -715,10 +797,11 @@ class Fms extends CI_Controller {
 							</div>
 						</div>' : '') . '
 					</div>
+					' . ($timesheet['status'] == 'approved' ? '<div class="approved-stamp">Approved</div>' : '') . '
 				</div>
 
 				<!-- Work Package Summary -->
-				<div class="card">
+				<div class="card section-spacing">
 					<div class="card-header">
 						<h5 class="mb-0">Summary by Work Package</h5>
 					</div>
@@ -756,7 +839,7 @@ class Fms extends CI_Controller {
 				</div>
 
 				<!-- Daily Time Entries -->
-				<div class="card">
+				<div class="card page-break-before">
 					<div class="card-header">
 						<h5 class="mb-0">Daily Time Entries</h5>
 					</div>
@@ -791,22 +874,51 @@ class Fms extends CI_Controller {
 					</div>
 				</div>';
 
-		// Add signature section if signature exists
-		if(!empty($timesheet['signature_image'])){
-			$html .= '
-				<div class="signature-section">
-					<h5>Signature</h5>
-					<img src="' . $timesheet['signature_image'] . '" class="signature-image" alt="Signature" />
-					<p><strong>Date Signed:</strong> ' . (!empty($timesheet['signature_date']) ? date('d/m/Y', strtotime($timesheet['signature_date'])) : 'N/A') . '</p>
-				</div>';
+		// Add approver signature section from settings
+		// Try to get signature from timesheet record, if not available, fetch from approver's current settings
+		$signature_data = null;
+
+		if(!empty($timesheet['approver_signature_file'])){
+			// Use signature data saved with the timesheet
+			$signature_data = array(
+				'signature_name' => $timesheet['approver_signature_name'],
+				'position' => $timesheet['approver_signature_position'],
+				'organization' => $timesheet['approver_signature_organization'],
+				'signature_file' => $timesheet['approver_signature_file']
+			);
+		} else if(!empty($timesheet['approved_by'])){
+			// Fetch approver's current signature from settings
+			$signature_data = $this->fmsm_enhanced->get_signature_by_user_id($timesheet['approved_by']);
+		}
+
+		if($signature_data && !empty($signature_data['signature_file'])){
+			// Convert approver signature image to base64 for PDF embedding
+			$approver_sig_path = FCPATH . 'assets/signatures/' . $signature_data['signature_file'];
+			$approver_sig_base64 = '';
+
+			if(file_exists($approver_sig_path)){
+				$image_data = base64_encode(file_get_contents($approver_sig_path));
+				$approver_sig_base64 = 'data:image/png;base64,' . $image_data;
+			}
+
+			if(!empty($approver_sig_base64)){
+				$html .= '
+					<div class="signature-section">
+						<h5>Approved By:</h5>
+						<img src="' . $approver_sig_base64 . '" class="signature-image" alt="Approver Signature" />
+						<p style="margin:5px 0;font-size:11px;"><strong>Name:</strong> ' . htmlspecialchars($signature_data['signature_name']) . '</p>
+						<p style="margin:5px 0;font-size:11px;"><strong>Position:</strong> ' . htmlspecialchars($signature_data['position']) . '</p>';
+
+				if(!empty($signature_data['organization'])){
+					$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Organization:</strong> ' . htmlspecialchars($signature_data['organization']) . '</p>';
+				}
+
+				$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Date Approved:</strong> ' . (!empty($timesheet['approved_at']) ? date('F j, Y', strtotime($timesheet['approved_at'])) : 'N/A') . '</p>
+					</div>';
+			}
 		}
 
 		$html .= '
-				<div class="signature-section">
-					<p style="margin-bottom: 30px;"><strong>Employee Signature:</strong></p>
-					<div class="signature-line"></div>
-					<div class="signature-label">Name and Date</div>
-				</div>
 			</div>
 
 		</body>
@@ -972,7 +1084,7 @@ class Fms extends CI_Controller {
 					'activity_description' => $entry_descriptions[$i]
 				);
 
-				$this->fmsm_enhanced->insert_timesheet_detail($detail_data);
+				$this->fmsm_enhanced->save_timesheet_detail($detail_data);
 			}
 
 			$this->session->set_flashdata('success', 'Timesheet updated and resubmitted successfully.');
@@ -1150,13 +1262,15 @@ class Fms extends CI_Controller {
         $config['allowed_types'] = 'pdf|xlsx|xls|doc|docx';
         $config['max_size'] = 10240; // 10MB
 
-		$file_name = $this->input->post('formFN');
+		$file_name_input = $this->input->post('formFN');
 		$file_extension = pathinfo($_FILES['formValidationFile']['name'], PATHINFO_EXTENSION);
-        $config['file_name'] = $file_name . '.' . $file_extension;
-        $this->upload->initialize($config);
-        $the_file_name = './assets/uploads/'.$file_name.'.'.$file_extension;
+        $final_file_name = $file_name_input . '.' . $file_extension;
+        $the_file_path = './assets/uploads/' . $final_file_name;
 
-        if (move_uploaded_file($_FILES['formValidationFile']['tmp_name'], $the_file_name)) {
+        // Update FileName in data with extension
+        $data['FileName'] = $final_file_name;
+
+        if (move_uploaded_file($_FILES['formValidationFile']['tmp_name'], $the_file_path)) {
             // Save expense using enhanced model
 			if($this->fmsm_enhanced->create_expense($data)){
 				$this->session->set_flashdata('success', 'Expense uploaded successfully and pending approval.');
@@ -1166,7 +1280,21 @@ class Fms extends CI_Controller {
 				redirect('newExpense?status=error');
 			}
         } else {
-            $this->session->set_flashdata('error', 'File upload failed: ' . $this->upload->display_errors());
+            $error_msg = 'File upload failed. ';
+            if(isset($_FILES['formValidationFile']['error'])){
+                switch($_FILES['formValidationFile']['error']){
+                    case UPLOAD_ERR_INI_SIZE:
+                    case UPLOAD_ERR_FORM_SIZE:
+                        $error_msg .= 'File too large (max 2MB).';
+                        break;
+                    case UPLOAD_ERR_NO_FILE:
+                        $error_msg .= 'No file selected.';
+                        break;
+                    default:
+                        $error_msg .= 'Error code: ' . $_FILES['formValidationFile']['error'];
+                }
+            }
+            $this->session->set_flashdata('error', $error_msg);
             redirect('newExpense?status=error');
         }
     }
@@ -1180,7 +1308,10 @@ class Fms extends CI_Controller {
 		$approver_id = $this->session->userdata('fms_user_id');
 		$comments = $this->input->post('comments');
 
-		if($this->fmsm_enhanced->approve_expense($expense_id, $approver_id, $comments)){
+		// Get approver's signature configuration
+		$signature = $this->fmsm_enhanced->get_signature_by_user_id($approver_id);
+
+		if($this->fmsm_enhanced->approve_expense($expense_id, $approver_id, $comments, $signature)){
 			$this->session->set_flashdata('success', 'Expense approved successfully.');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to approve expense.');
@@ -1205,22 +1336,634 @@ class Fms extends CI_Controller {
 
 		redirect('expenses');
 	}
-	
+
+	public function generateReport(){
+		// Only admins can generate reports
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin()){
+			show_error('Access Denied: You do not have permission to generate reports.', 403);
+		}
+
+		// Get form inputs
+		$from_date = $this->input->post('from_date');
+		$to_date = $this->input->post('to_date');
+		$partner_id = $this->input->post('partner_id');
+		$status = $this->input->post('status');
+
+		// Validate dates
+		if(empty($from_date) || empty($to_date)){
+			if($this->input->is_ajax_request()){
+				echo json_encode(['success' => false, 'message' => 'Please select both from and to dates']);
+				return;
+			}
+			$this->session->set_flashdata('error', 'Please select both from and to dates');
+			redirect('expenses');
+			return;
+		}
+
+		// Get expenses based on filters
+		$expenses = $this->fmsm_enhanced->get_expenses_for_report($from_date, $to_date, $partner_id, $status);
+
+		if(empty($expenses)){
+			if($this->input->is_ajax_request()){
+				echo json_encode(['success' => false, 'message' => 'No expenses found for the selected criteria']);
+				return;
+			}
+			$this->session->set_flashdata('error', 'No expenses found for the selected criteria');
+			redirect('expenses');
+			return;
+		}
+
+		// Load PDF library
+		require_once FCPATH . 'vendor/autoload.php';
+		$dompdf = new \Dompdf\Dompdf();
+
+		// Calculate totals by currency
+		$totals = [
+			'RWF'         => 0,
+			'RWF_in_EUR'  => 0,   // RWF total converted to EUR via daily forex rate
+			'EUR'         => 0,
+			'USD'         => 0,
+			'count'       => count($expenses),
+			'rwf_no_rate' => 0,   // RWF rows where no forex rate was found
+		];
+
+		foreach($expenses as $expense){
+			$cur = strtoupper($expense['Currency']);
+			if($cur === 'RWF'){
+				$totals['RWF'] += $expense['Amount'];
+				if(!empty($expense['forex_rate']) && $expense['forex_rate'] > 0){
+					$totals['RWF_in_EUR'] += $expense['Amount'] / $expense['forex_rate'];
+				} else {
+					$totals['rwf_no_rate']++;
+				}
+			} elseif(isset($totals[$cur])){
+				$totals[$cur] += $expense['Amount'];
+			}
+		}
+
+		// Get partner name if filtered
+		$partner_name = 'All Partners';
+		if(!empty($partner_id)){
+			$partner = $this->fmsm_enhanced->get_partner_by_id($partner_id);
+			if($partner){
+				$partner_name = $partner['name'];
+			}
+		}
+
+		// Generate HTML for PDF
+		$html = $this->generate_report_html($expenses, $totals, $from_date, $to_date, $partner_name, $status);
+
+		$dompdf->loadHtml($html);
+		$dompdf->setPaper('A4', 'landscape');
+		$dompdf->render();
+
+		// Generate filename
+		$filename = 'Expense_Report_' . date('Y-m-d', strtotime($from_date)) . '_to_' . date('Y-m-d', strtotime($to_date)) . '.pdf';
+
+		// Save PDF to temporary directory
+		$reports_dir = FCPATH . 'assets/reports/';
+		if(!is_dir($reports_dir)){
+			mkdir($reports_dir, 0777, true);
+		}
+
+		$file_path = $reports_dir . $filename;
+		file_put_contents($file_path, $dompdf->output());
+
+		// Return JSON response for AJAX request or stream for direct access
+		if($this->input->is_ajax_request()){
+			echo json_encode([
+				'success' => true,
+				'message' => 'Report generated successfully',
+				'file_url' => base_url('assets/reports/' . $filename),
+				'file_name' => $filename
+			]);
+		} else {
+			// For direct access, stream the PDF
+			$dompdf->stream($filename, array('Attachment' => 0));
+		}
+	}
+
+	public function generateTimesheetReport(){
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied', 403);
+		}
+
+		$from_period = $this->input->post('from_period'); // YYYY-MM
+		$to_period   = $this->input->post('to_period');
+		$partner_id  = $this->input->post('partner_id');
+		$status      = $this->input->post('status');
+
+		if(empty($from_period) || empty($to_period)){
+			echo json_encode(['success' => false, 'message' => 'Please select both From and To periods']);
+			return;
+		}
+
+		$from_parts = explode('-', $from_period);
+		$to_parts   = explode('-', $to_period);
+		$from_year  = $from_parts[0];  $from_month = $from_parts[1];
+		$to_year    = $to_parts[0];    $to_month   = $to_parts[1];
+
+		// Coordinators can only pull their own partner
+		if($this->auth_manager->is_coordinator() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_super_admin()){
+			$partner_id = $this->session->userdata('fms_partner_id');
+		}
+
+		$timesheets = $this->fmsm_enhanced->get_timesheets_for_report($from_year, $from_month, $to_year, $to_month, $partner_id, $status);
+
+		if(empty($timesheets)){
+			echo json_encode(['success' => false, 'message' => 'No timesheets found for the selected criteria']);
+			return;
+		}
+
+		$partner_name = 'All Partners';
+		if(!empty($partner_id)){
+			$partner = $this->fmsm_enhanced->get_partner_by_id($partner_id);
+			if($partner) $partner_name = $partner['name'];
+		}
+
+		$months = [1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
+		           7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'];
+		$from_label = $months[(int)$from_month].' '.$from_year;
+		$to_label   = $months[(int)$to_month].' '.$to_year;
+
+		require_once FCPATH . 'vendor/autoload.php';
+		$dompdf = new \Dompdf\Dompdf();
+		$html = $this->generate_timesheet_report_html($timesheets, $from_label, $to_label, $partner_name, $status);
+		$dompdf->loadHtml($html);
+		$dompdf->setPaper('A4', 'landscape');
+		$dompdf->render();
+
+		$filename = 'Timesheet_Report_'.str_replace(' ','_',$from_label).'_to_'.str_replace(' ','_',$to_label).'.pdf';
+		$reports_dir = FCPATH . 'assets/reports/';
+		if(!is_dir($reports_dir)) mkdir($reports_dir, 0777, true);
+		file_put_contents($reports_dir . $filename, $dompdf->output());
+
+		echo json_encode([
+			'success'  => true,
+			'message'  => 'Report generated successfully',
+			'file_url' => base_url('assets/reports/' . $filename) . '?v=' . time(),
+			'file_name'=> $filename
+		]);
+	}
+
+	private function generate_timesheet_report_html($timesheets, $from_label, $to_label, $partner_name, $status){
+		$months      = [1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
+		                7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'];
+		$status_text = empty($status) ? 'All Status' : ucfirst($status);
+		$logo_html   = $this->get_pdf_logo_html('48px');
+
+		// ── Aggregate ────────────────────────────────────────────────
+		$total_hours      = 0;
+		$hours_by_partner = [];
+		$status_counts    = [];
+		$hours_by_category= [];
+
+		foreach($timesheets as $ts){
+			$h     = (float)$ts['total_hours'];
+			$total_hours += $h;
+			$pname = $ts['partner_name'] ?: 'Unknown';
+			$hours_by_partner[$pname] = ($hours_by_partner[$pname] ?? 0) + $h;
+			$s = ucfirst($ts['status']);
+			$status_counts[$s] = ($status_counts[$s] ?? 0) + 1;
+			$cat = $ts['staff_category'] ?: 'N/A';
+			$hours_by_category[$cat] = ($hours_by_category[$cat] ?? 0) + $h;
+		}
+		arsort($hours_by_partner);
+
+		// ── HTML chart helpers (pure HTML — reliable in Dompdf) ─────────
+
+		// Horizontal bar chart
+		$barChart = function($data, $title) {
+			if(empty($data)) return '';
+			$maxV    = max($data) ?: 1;
+			$total   = array_sum($data) ?: 1;
+			$barPxW  = 180; // fixed pixel width of the bar track
+			$colors  = ['#696cff','#7c7fff','#9092ff','#a4a6ff','#b8baff','#ccceff'];
+
+			$o  = '<table style="width:100%;border-collapse:collapse;">';
+			// Title header
+			$o .= '<tr><td colspan="3" style="background:#696cff;color:#fff;padding:9px 14px;'
+			    . 'font-weight:bold;font-size:10.5px;border-radius:5px 5px 0 0;">'
+			    . htmlspecialchars($title).'</td></tr>';
+			$ci = 0;
+			foreach($data as $lbl => $val){
+				$bw    = max(4, (int)round(($val / $maxV) * $barPxW));
+				$pct   = round($val / $total * 100);
+				$clr   = $colors[min($ci, count($colors)-1)];
+				$rowBg = ($ci % 2 === 0) ? '#f8f8ff' : '#ffffff';
+				$short = mb_strlen($lbl) > 24 ? mb_substr($lbl,0,22).'…' : $lbl;
+				$o .= '<tr style="background:'.$rowBg.'">';
+				// Label cell
+				$o .= '<td style="padding:7px 10px 7px 12px;font-size:9px;color:#444;'
+				    . 'width:145px;border-bottom:1px solid #eeeefc;">'
+				    . htmlspecialchars($short).'</td>';
+				// Bar cell
+				$o .= '<td style="padding:7px 6px;border-bottom:1px solid #eeeefc;">';
+				$o .= '<div style="background:#ececf8;border-radius:4px;width:'.$barPxW.'px;height:18px;">';
+				$o .= '<div style="background:'.$clr.';border-radius:4px;width:'.$bw.'px;height:18px;"></div>';
+				$o .= '</div></td>';
+				// Value + pct cell
+				$o .= '<td style="padding:7px 12px 7px 8px;font-size:9px;text-align:right;'
+				    . 'border-bottom:1px solid #eeeefc;white-space:nowrap;">'
+				    . '<strong style="color:#1565c0;">'.number_format($val,1).'h</strong>'
+				    . '&nbsp;<span style="color:#aaa;font-size:8px;">'.$pct.'%</span>'
+				    . '</td>';
+				$o .= '</tr>';
+				$ci++;
+			}
+			$o .= '</table>';
+			return $o;
+		};
+
+		// Status distribution — coloured stat boxes + mini legend rows
+		$htmlBar = $barChart($hours_by_partner, 'Hours by Institution');
+
+		// ── Counts for stat cards ────────────────────────────────────
+		$cnt_approved  = $status_counts['Approved']  ?? 0;
+		$cnt_submitted = $status_counts['Submitted'] ?? 0;
+		$cnt_rejected  = $status_counts['Rejected']  ?? 0;
+
+		// ── Signature ────────────────────────────────────────────────
+		$user_id   = $this->session->userdata('fms_user_id');
+		$signature = $this->fmsm_enhanced->get_signature_by_user_id($user_id);
+
+		// ── HTML ─────────────────────────────────────────────────────
+		$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Timesheet Report</title>';
+		$html .= '<style>
+			*{margin:0;padding:0;box-sizing:border-box}
+			body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#333;background:#fff;
+			     line-height:1.45}
+
+			/* ── Page margins handled by wrapper div ── */
+			@page{margin:0}
+
+			/* ── Header bar ── */
+			.hdr{display:table;width:100%;border-bottom:3px solid #696cff;
+			     padding-bottom:14px;margin-bottom:20px}
+			.hdr-l{display:table-cell;vertical-align:middle;width:175px}
+			.hdr-r{display:table-cell;vertical-align:middle;text-align:right}
+			.hdr-r h1{font-size:22px;color:#1a1a2e;font-weight:800;letter-spacing:-.5px;margin:0}
+			.hdr-r .sub{font-size:8.5px;color:#696cff;margin:5px 0 0;letter-spacing:.5px;
+			            text-transform:uppercase}
+			.hdr-r .gen{font-size:8px;color:#bbb;margin:4px 0 0}
+
+			/* ── Meta strip ── */
+			.meta-strip{background:#f5f5ff;border:1px solid #e2e2f5;border-radius:6px;
+			            padding:10px 14px;margin-bottom:24px}
+			.meta-strip table{width:100%}
+			.meta-strip td{padding:3px 12px 3px 0;font-size:9px;color:#555;white-space:nowrap}
+			.meta-strip strong{color:#333}
+
+			/* ── Stat cards ── */
+			.cards{display:table;width:100%;border-collapse:separate;border-spacing:0;
+			       margin-bottom:26px}
+			.card{display:table-cell;border-radius:8px;padding:16px 10px;text-align:center;
+			      vertical-align:middle}
+			.card .n{font-size:24px;font-weight:800;line-height:1}
+			.card .l{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;
+			         margin-top:6px;color:#999;font-weight:600}
+			.c-purple{background:#f0edff;border:1px solid #c5bbff}.c-purple .n{color:#696cff}
+			.c-blue  {background:#e8f4fd;border:1px solid #90caf9}.c-blue   .n{color:#1565c0}
+			.c-green {background:#e8f5e9;border:1px solid #a5d6a7}.c-green  .n{color:#2e7d32}
+			.c-orange{background:#fff8e1;border:1px solid #ffcc80}.c-orange .n{color:#e65100}
+			.c-red   {background:#fce4ec;border:1px solid #f48fb1}.c-red    .n{color:#c62828}
+			.card-gap{display:table-cell;width:14px}
+
+			/* ── Section heading ── */
+			.sec{font-size:11.5px;font-weight:700;color:#696cff;
+			     margin:28px 0 12px;padding-bottom:6px;
+			     border-bottom:2px solid #e4e4ff;letter-spacing:.2px}
+
+			/* ── Data table ── */
+			table.dt{width:100%;border-collapse:collapse;font-size:9.5px}
+			table.dt thead tr{background:#696cff}
+			table.dt th{color:#fff;padding:10px 11px;font-size:9px;font-weight:600;
+			            letter-spacing:.25px;text-align:left}
+			table.dt td{padding:8px 11px;border-bottom:1px solid #eeeefc;vertical-align:middle}
+			table.dt tbody tr:nth-child(even){background:#f7f7ff}
+			table.dt tfoot td{background:#ededff;font-weight:700;
+			                  border-top:2px solid #696cff;padding:9px 11px;font-size:10.5px}
+
+			/* ── Badges ── */
+			.b{display:inline-block;padding:3px 10px;border-radius:10px;
+			   font-size:7.5px;font-weight:700;letter-spacing:.2px}
+			.b-approved {background:#c8e6c9;color:#1b5e20}
+			.b-submitted{background:#fff3cd;color:#856404}
+			.b-rejected {background:#ffcdd2;color:#b71c1c}
+			.b-draft    {background:#e0e0e0;color:#424242}
+
+			/* ── Signature ── */
+			.sig-wrap{display:table;width:100%;margin-top:40px;page-break-inside:avoid}
+			.sig-l{display:table-cell;vertical-align:bottom}
+			.sig-r{display:table-cell;vertical-align:bottom;text-align:right;width:270px}
+			.sig-box{display:inline-block;border-top:1.5px solid #ccc;
+			         padding-top:10px;min-width:230px}
+			.sig-img{max-width:175px;max-height:70px;margin-bottom:6px}
+			.sig-name{font-size:11.5px;font-weight:700;color:#1a1a2e}
+			.sig-role{font-size:9px;color:#777;margin-top:3px}
+			.sig-date{font-size:8.5px;color:#bbb;margin-top:2px}
+
+			/* ── Footer ── */
+			.foot{margin-top:24px;text-align:center;font-size:8px;color:#ccc;
+			      border-top:1px solid #eee;padding-top:10px}
+		</style></head><body>';
+
+		// ── Outer padding wrapper (controls left/right/top/bottom margins) ──
+		$html .= '<div style="padding:38px 52px 36px 52px;">';
+
+		// ── Header ──
+		$html .= '<div class="hdr">';
+		$html .= '<div class="hdr-l">'.$logo_html.'</div>';
+		$html .= '<div class="hdr-r"><h1>Timesheet Report</h1>';
+		$html .= '<p class="sub">ERASMUS+ GREATER — Growing Rwanda Energy Awareness Through highER education</p>';
+		$html .= '<p class="gen">Generated: '.date('F j, Y \a\t g:i A').'</p></div></div>';
+
+		// ── Meta strip ──
+		$html .= '<div class="meta-strip"><table><tr>';
+		$html .= '<td><strong>Period:</strong> '.$from_label.' — '.$to_label.'</td>';
+		$html .= '<td><strong>Institution:</strong> '.htmlspecialchars($partner_name).'</td>';
+		$html .= '<td><strong>Status:</strong> '.$status_text.'</td>';
+		$html .= '<td><strong>Records:</strong> '.count($timesheets).'</td>';
+		$html .= '</tr></table></div>';
+
+		// ── Stat cards ──
+		$html .= '<table class="cards"><tr>';
+		$html .= '<td class="card c-purple"><div class="n">'.count($timesheets).'</div><div class="l">Timesheets</div></td><td class="card-gap"></td>';
+		$html .= '<td class="card c-blue"><div class="n">'.number_format($total_hours,1).'h</div><div class="l">Total Hours</div></td><td class="card-gap"></td>';
+		$html .= '<td class="card c-green"><div class="n">'.$cnt_approved.'</div><div class="l">Approved</div></td><td class="card-gap"></td>';
+		$html .= '<td class="card c-orange"><div class="n">'.$cnt_submitted.'</div><div class="l">Submitted</div></td><td class="card-gap"></td>';
+		$html .= '<td class="card c-red"><div class="n">'.$cnt_rejected.'</div><div class="l">Rejected</div></td>';
+		$html .= '</tr></table>';
+
+		// ── Charts ──
+		if(!empty($hours_by_partner)){
+			$html .= '<div class="sec">Analytics Overview</div>';
+			$boxStyle = 'border:1px solid #e0e0f5;border-radius:8px;padding:14px 12px;background:#fafafe;';
+			$html .= '<div style="'.$boxStyle.'">'.$htmlBar.'</div>';
+		}
+
+		// ── Detailed table ──
+		$html .= '<div class="sec">Timesheet Details</div>';
+		$html .= '<table class="dt"><thead><tr>';
+		$html .= '<th>#</th><th>Staff Member</th><th>Partner / Institution</th>';
+		$html .= '<th>Period</th><th>Staff Category</th><th style="text-align:right">Total Hours</th>';
+		$html .= '<th>Submitted</th><th>Status</th></tr></thead><tbody>';
+
+		$i = 1;
+		foreach($timesheets as $ts){
+			$period    = $months[(int)$ts['month']].' '.$ts['year'];
+			$submitted = !empty($ts['submitted_at']) ? date('d/m/Y', strtotime($ts['submitted_at'])) : '—';
+			$bc        = 'b-'.strtolower($ts['status']);
+			$html .= '<tr>';
+			$html .= '<td style="color:#bbb">'.$i++.'</td>';
+			$html .= '<td><strong>'.htmlspecialchars($ts['first_name'].' '.$ts['last_name']).'</strong></td>';
+			$html .= '<td>'.htmlspecialchars($ts['partner_name'] ?: '—').'</td>';
+			$html .= '<td>'.$period.'</td>';
+			$html .= '<td>'.htmlspecialchars($ts['staff_category'] ?: '—').'</td>';
+			$html .= '<td style="text-align:right;font-weight:700;color:#1976d2;">'.number_format($ts['total_hours'],1).'h</td>';
+			$html .= '<td>'.$submitted.'</td>';
+			$html .= '<td><span class="b '.$bc.'">'.ucfirst($ts['status']).'</span></td>';
+			$html .= '</tr>';
+		}
+		$html .= '</tbody><tfoot><tr>';
+		$html .= '<td colspan="5" style="text-align:right;color:#696cff;">GRAND TOTAL</td>';
+		$html .= '<td style="text-align:right;color:#1976d2;font-size:11px;">'.number_format($total_hours,1).'h</td>';
+		$html .= '<td colspan="2"></td></tr></tfoot></table>';
+
+		// ── Hours by Institution breakdown (if multi-partner) ──
+		if(count($hours_by_partner) > 1){
+			$html .= '<div class="sec">Hours Breakdown by Institution</div>';
+			$thStyle  = 'padding:9px 14px;text-align:left;font-size:9px;font-weight:600;letter-spacing:.2px;background:#696cff;color:#fff;border:1px solid #5a5ce8;';
+			$thStyleR = $thStyle.'text-align:right;';
+			$tdBase   = 'padding:8px 14px;border:1px solid #e4e4f5;vertical-align:middle;font-size:9.5px;';
+			$tdR      = $tdBase.'text-align:right;';
+			$html .= '<table style="width:65%;border-collapse:collapse;margin-top:6px;">';
+			$html .= '<thead><tr>';
+			$html .= '<th style="'.$thStyle.'">Institution</th>';
+			$html .= '<th style="'.$thStyleR.'">Total Hours</th>';
+			$html .= '<th style="'.$thStyleR.'">Share</th>';
+			$html .= '</tr></thead><tbody>';
+			$ri = 0;
+			foreach($hours_by_partner as $pn => $ph){
+				$pct = round($ph / max($total_hours,1) * 100, 1);
+				$rowBg = ($ri++ % 2 === 0) ? '#ffffff' : '#f7f7ff';
+				$html .= '<tr style="background:'.$rowBg.'">';
+				$html .= '<td style="'.$tdBase.'">'.htmlspecialchars($pn).'</td>';
+				$html .= '<td style="'.$tdR.'font-weight:700;color:#1565c0;">'.number_format($ph,1).' h</td>';
+				$html .= '<td style="'.$tdR.'color:#696cff;">'.$pct.' %</td>';
+				$html .= '</tr>';
+			}
+			$html .= '</tbody>';
+			$tfStyle = 'padding:9px 14px;border-top:2px solid #696cff;background:#ededff;font-weight:700;font-size:10px;';
+			$html .= '<tfoot><tr>';
+			$html .= '<td style="'.$tfStyle.'">Grand Total</td>';
+			$html .= '<td style="'.$tfStyle.'text-align:right;color:#1565c0;">'.number_format($total_hours,1).' h</td>';
+			$html .= '<td style="'.$tfStyle.'text-align:right;color:#696cff;">100 %</td>';
+			$html .= '</tr></tfoot></table>';
+		}
+
+		// ── Signature ──
+		if($signature && !empty($signature['signature_file'])){
+			$sig_path = FCPATH . 'assets/signatures/' . $signature['signature_file'];
+			$sig_img  = '';
+			if(file_exists($sig_path)){
+				$sig_img = 'data:image/png;base64,'.base64_encode(file_get_contents($sig_path));
+			}
+			$html .= '<div class="sig-wrap"><div class="sig-l"></div><div class="sig-r"><div class="sig-box">';
+			if($sig_img) $html .= '<img src="'.$sig_img.'" class="sig-img" alt="Signature"><br>';
+			$html .= '<div class="sig-name">'.htmlspecialchars($signature['signature_name']).'</div>';
+			$html .= '<div class="sig-role">'.htmlspecialchars($signature['position']).'</div>';
+			if(!empty($signature['organization']))
+				$html .= '<div class="sig-role">'.htmlspecialchars($signature['organization']).'</div>';
+			$html .= '<div class="sig-date">Date: '.date('F j, Y').'</div>';
+			$html .= '</div></div></div>';
+		}
+
+		$html .= '<div class="foot">© '.date('Y').' GREATER — Erasmus+ Programme Project 101083081'
+		       . ' &nbsp;·&nbsp; Generated automatically by the Financial Management System</div>';
+
+		$html .= '</div>'; // end padding wrapper
+		$html .= '</body></html>';
+		return $html;
+	}
+
+	private function generate_report_html($expenses, $totals, $from_date, $to_date, $partner_name, $status){
+		$status_text = empty($status) ? 'All Status' : ucfirst($status);
+
+		// Determine which signature to use
+		// Priority: 1) Common approver signature from approved expenses, 2) Current user's signature
+		$signature = null;
+
+		// Check if all approved expenses have the same approver signature
+		$approver_signatures = array();
+		foreach($expenses as $expense){
+			if($expense['status'] == 'approved' && !empty($expense['approver_signature_name'])){
+				$sig_key = $expense['approver_signature_name'] . '_' . $expense['approver_signature_file'];
+				if(!isset($approver_signatures[$sig_key])){
+					$approver_signatures[$sig_key] = array(
+						'signature_name' => $expense['approver_signature_name'],
+						'position' => $expense['approver_signature_position'],
+						'organization' => $expense['approver_signature_organization'],
+						'signature_file' => $expense['approver_signature_file']
+					);
+				}
+			}
+		}
+
+		// If there's exactly one unique approver signature, use it
+		if(count($approver_signatures) == 1){
+			$signature = reset($approver_signatures);
+		} else {
+			// Otherwise, use current user's signature
+			$user_id = $this->session->userdata('fms_user_id');
+			$signature = $this->fmsm_enhanced->get_signature_by_user_id($user_id);
+		}
+
+		$logo_html = $this->get_pdf_logo_html('52px');
+
+		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Expense Report</title>';
+		$html .= '<style>
+			body{font-family:"Segoe UI",Tahoma,Geneva,Verdana,sans-serif;font-size:10px;color:#333}
+			.pdf-logo-bar{display:table;width:100%;border-bottom:3px solid #696cff;padding-bottom:10px;margin-bottom:18px;}
+			.pdf-logo-bar-left{display:table-cell;vertical-align:middle;width:180px;}
+			.pdf-logo-bar-right{display:table-cell;vertical-align:middle;text-align:right;}
+			.pdf-logo-bar-right h2{font-size:16px;color:#333;margin:0;font-weight:700;}
+			.pdf-logo-bar-right p{font-size:9px;color:#696cff;margin:2px 0 0 0;letter-spacing:.5px;}
+			.info{margin-bottom:15px}.info table{width:100%}.info td{padding:3px 6px}
+			table.expenses{width:100%;border-collapse:collapse;margin-top:10px}
+			table.expenses th{background:#696cff;color:white;padding:7px 6px;text-align:left;font-size:9px}
+			table.expenses td{border:1px solid #ddd;padding:5px 6px;font-size:9px}
+			table.expenses tr:nth-child(even){background:#f5f5f5}
+			.summary{margin-top:20px;padding:12px 15px;background:#f0f4ff;border-left:4px solid #696cff;border-radius:4px;}
+			.summary h3{margin:0 0 10px 0;font-size:12px;color:#696cff;}
+			.signature-section{margin-top:40px;page-break-inside:avoid}
+			.signature-image{max-width:200px;max-height:80px;margin:15px 0}
+			.footer{margin-top:30px;text-align:center;font-size:8px;color:#999;border-top:1px solid #eee;padding-top:10px;}
+		</style>';
+		$html .= '</head><body>';
+		$html .= '<div class="pdf-logo-bar">';
+		$html .= '<div class="pdf-logo-bar-left">'.$logo_html.'</div>';
+		$html .= '<div class="pdf-logo-bar-right"><h2>Expense Report</h2><p>ERASMUS+ GREATER — Growing Rwanda Energy Awareness Through highER education</p></div>';
+		$html .= '</div>';
+		$html .= '<div class="info"><table><tr><td><strong>Report Period:</strong> '.date('F j, Y',strtotime($from_date)).' to '.date('F j, Y',strtotime($to_date)).'</td>';
+		$html .= '<td><strong>Institution:</strong> '.htmlspecialchars($partner_name).'</td></tr><tr><td><strong>Status Filter:</strong> '.$status_text.'</td>';
+		$html .= '<td><strong>Generated:</strong> '.date('F j, Y g:i A').'</td></tr></table></div>';
+		$html .= '<table class="expenses"><thead><tr><th>#</th><th>Date</th><th>Partner</th><th>Description</th><th>Category</th>';
+		$html .= '<th>Work Package</th><th>Amount (RWF/EUR/USD)</th><th>EUR Equiv.</th><th>Currency</th><th>Status</th></tr></thead><tbody>';
+
+		$counter = 1;
+		foreach($expenses as $expense){
+			$status_badge = $expense['status'] == 'approved' ? 'Approved' : ($expense['status'] == 'rejected' ? 'Rejected' : 'Pending');
+			$cur = strtoupper($expense['Currency']);
+
+			// EUR equivalent cell
+			if($cur === 'RWF' && !empty($expense['forex_rate']) && $expense['forex_rate'] > 0){
+				$eur_equiv = $expense['Amount'] / $expense['forex_rate'];
+				$eur_cell  = '<span style="color:#2e7d32;font-weight:600;">'.number_format($eur_equiv,2).' EUR</span>'
+				           . '<br><span style="font-size:8px;color:#888;">'.number_format($expense['forex_rate'],2).' RWF=1€</span>';
+			} elseif($cur === 'EUR'){
+				$eur_cell = '<span style="color:#2e7d32;font-weight:600;">'.number_format($expense['Amount'],2).' EUR</span>';
+			} else {
+				$eur_cell = '<span style="color:#aaa;">—</span>';
+			}
+
+			$html .= '<tr><td>'.$counter++.'</td><td>'.date('d/m/Y',strtotime($expense['Date'])).'</td><td>'.htmlspecialchars($expense['Partner']).'</td>';
+			$html .= '<td>'.htmlspecialchars($expense['ShortDescription']).'</td><td>'.htmlspecialchars($expense['Category']).'</td>';
+			$html .= '<td>'.htmlspecialchars($expense['WorkPackage']).'</td>';
+			$html .= '<td style="text-align:right;font-weight:600;">'.number_format($expense['Amount'],2).'</td>';
+			$html .= '<td style="text-align:right;">'.$eur_cell.'</td>';
+			$html .= '<td>'.$cur.'</td><td>'.$status_badge.'</td></tr>';
+		}
+
+		$html .= '</tbody></table>';
+
+		// Summary section
+		$html .= '<div class="summary"><h3>Summary</h3>';
+		$html .= '<table style="width:100%;border-collapse:collapse;">';
+		$html .= '<tr><td style="padding:4px 0;"><strong>Total Expenses:</strong></td><td>'.$totals['count'].' records</td></tr>';
+
+		if($totals['RWF'] > 0){
+			$html .= '<tr><td style="padding:4px 0;"><strong>Total Amount (RWF):</strong></td>';
+			$html .= '<td><span style="font-size:12px;">'.number_format($totals['RWF'],2).' RWF</span>';
+			if($totals['RWF_in_EUR'] > 0){
+				$html .= ' &nbsp;=&nbsp; <span style="color:#2e7d32;font-size:13px;font-weight:bold;">'.number_format($totals['RWF_in_EUR'],2).' EUR</span>';
+				if($totals['rwf_no_rate'] > 0){
+					$html .= ' <span style="color:#c62828;font-size:8px;">('.$totals['rwf_no_rate'].' row(s) excluded — no rate found)</span>';
+				}
+			}
+			$html .= '</td></tr>';
+		}
+
+		if($totals['EUR'] > 0){
+			$combined_eur = $totals['EUR'] + $totals['RWF_in_EUR'];
+			$html .= '<tr><td style="padding:4px 0;"><strong>Total Amount (EUR):</strong></td>';
+			$html .= '<td><span style="font-size:12px;">'.number_format($totals['EUR'],2).' EUR</span></td></tr>';
+			if($totals['RWF'] > 0){
+				$html .= '<tr><td style="padding:4px 0;"><strong>Grand Total (EUR incl. converted RWF):</strong></td>';
+				$html .= '<td><span style="color:#1a237e;font-size:14px;font-weight:bold;">'.number_format($combined_eur,2).' EUR</span></td></tr>';
+			}
+		}
+
+		if($totals['USD'] > 0){
+			$html .= '<tr><td style="padding:4px 0;"><strong>Total Amount (USD):</strong></td>';
+			$html .= '<td>'.number_format($totals['USD'],2).' USD</td></tr>';
+		}
+
+		$html .= '</table></div>';
+
+		// Add signature section if configured
+		if($signature && isset($signature['signature_file'])){
+			$signature_path = FCPATH . 'assets/signatures/' . $signature['signature_file'];
+
+			// Convert image to base64 for embedding in PDF
+			$signature_image = '';
+			if(file_exists($signature_path)){
+				$image_data = base64_encode(file_get_contents($signature_path));
+				$signature_image = 'data:image/png;base64,' . $image_data;
+			}
+
+			$html .= '<div class="signature-section">';
+			$html .= '<h5 style="font-size:12px;font-weight:600;margin-bottom:10px;">Approved By:</h5>';
+
+			// Add signature image if available
+			if(!empty($signature_image)){
+				$html .= '<img src="'.$signature_image.'" class="signature-image" alt="Signature" />';
+			}
+
+			$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Name:</strong> '.htmlspecialchars($signature['signature_name']).'</p>';
+			$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Position:</strong> '.htmlspecialchars($signature['position']).'</p>';
+
+			if(!empty($signature['organization'])){
+				$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Organization:</strong> '.htmlspecialchars($signature['organization']).'</p>';
+			}
+
+			$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Date Signed:</strong> '.date('F j, Y').'</p>';
+			$html .= '</div>';
+		}
+
+		$html .= '<div class="footer"><p>© '.date('Y').' GREATER - Erasmus+ Programme Project 101083081</p>';
+		$html .= '<p>This report was generated automatically by the Financial Management System</p></div></body></html>';
+
+		return $html;
+	}
+
 	public function users() {
 		// Only admins and coordinators can view users
 		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
 			show_error('Access Denied: You do not have permission to view users.', 403);
 		}
 
-		$this->data['title'] = "FMS - Users";
+		$this->data['title'] = "FMS - Users & Staff";
 
-		// Get users based on role
+		// Get users and staff based on role
 		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
 			$this->data['users'] = $this->fmsm_enhanced->get_all_users();
+			$this->data['staff'] = $this->fmsm_enhanced->get_all_staff();
 		} else {
-			// Coordinators see only their institution's users
+			// Coordinators see only their institution's data
 			$partner_id = $this->session->userdata('fms_partner_id');
 			$this->data['users'] = $this->fmsm_enhanced->get_all_users($partner_id);
+			$this->data['staff'] = $this->fmsm_enhanced->get_all_staff($partner_id);
 		}
 
 		$this->load->view('pages/users', $this->data);
@@ -1299,7 +2042,6 @@ class Fms extends CI_Controller {
 				'email' => $this->input->post('email'),
 				'password' => sha1($this->input->post('password')),
 				'role_id' => $role_id,
-				'level' => $this->input->post('level', TRUE) ?: 1,
 				'status' => 'active'
 			);
 
@@ -1438,6 +2180,178 @@ class Fms extends CI_Controller {
 
 		redirect('users');
 	}
+
+	// ==================== STAFF MANAGEMENT METHODS ====================
+
+	public function newStaff(){
+		// Only admins and coordinators can create staff
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to create staff.', 403);
+		}
+
+		$this->data["title"] = "FMS - New Staff Member";
+
+		// Get all partners for super admin/admin
+		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
+			$this->data['partners'] = $this->fmsm_enhanced->get_all_partners();
+		}
+
+		$this->load->view('pages/newstaff', $this->data);
+	}
+
+	public function saveStaff(){
+		// Only admins and coordinators can create staff
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to create staff.', 403);
+		}
+
+		// Validate inputs
+		$this->form_validation->set_rules('first_name', 'First Name', 'required|trim');
+		$this->form_validation->set_rules('last_name', 'Last Name', 'required|trim');
+		$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim|is_unique[staff.email]');
+		$this->form_validation->set_rules('position', 'Position', 'required|trim');
+		$this->form_validation->set_rules('partner_id', 'Partner/Institution', 'required|numeric');
+
+		if($this->form_validation->run() === FALSE){
+			$this->newStaff();
+			return;
+		}
+
+		// Prepare staff data
+		$staff_data = array(
+			'first_name' => $this->input->post('first_name'),
+			'last_name' => $this->input->post('last_name'),
+			'email' => $this->input->post('email'),
+			'phone' => $this->input->post('phone'),
+			'position' => $this->input->post('position'),
+			'department' => $this->input->post('department'),
+			'partner_id' => $this->input->post('partner_id'),
+			'greater_role' => $this->input->post('greater_role'),
+			'employee_number' => $this->input->post('employee_number'),
+			'hire_date' => $this->input->post('hire_date') ? $this->input->post('hire_date') : NULL,
+			'status' => $this->input->post('status') ? $this->input->post('status') : 'active'
+		);
+
+		// Create staff member
+		if($this->fmsm_enhanced->create_staff($staff_data)){
+			$this->session->set_flashdata('success', 'Staff member created successfully.');
+			redirect('users');
+		} else {
+			$this->session->set_flashdata('error', 'Failed to create staff member. Please try again.');
+			$this->newStaff();
+		}
+	}
+
+	public function editStaff($staff_id){
+		// Only admins and coordinators can edit staff
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to edit staff.', 403);
+		}
+
+		$this->data["title"] = "FMS - Edit Staff Member";
+
+		// Get staff data
+		$this->data['staff'] = $this->fmsm_enhanced->get_staff_by_id($staff_id);
+
+		if(empty($this->data['staff'])){
+			show_404();
+		}
+
+		// Coordinators can only edit staff from their institution
+		if($this->auth_manager->is_coordinator() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_super_admin()){
+			$partner_id = $this->session->userdata('fms_partner_id');
+			if($this->data['staff']['partner_id'] != $partner_id){
+				show_error('Access Denied: You can only edit staff from your institution.', 403);
+			}
+		}
+
+		// Get all partners for super admin/admin
+		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
+			$this->data['partners'] = $this->fmsm_enhanced->get_all_partners();
+		}
+
+		$this->load->view('pages/editstaff', $this->data);
+	}
+
+	public function updateStaff($staff_id){
+		// Only admins and coordinators can update staff
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to update staff.', 403);
+		}
+
+		// Get staff data to verify permissions
+		$staff = $this->fmsm_enhanced->get_staff_by_id($staff_id);
+		if(empty($staff)){
+			show_404();
+		}
+
+		// Coordinators can only edit staff from their institution
+		if($this->auth_manager->is_coordinator() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_super_admin()){
+			$partner_id = $this->session->userdata('fms_partner_id');
+			if($staff['partner_id'] != $partner_id){
+				show_error('Access Denied: You can only edit staff from your institution.', 403);
+			}
+		}
+
+		// Validate inputs
+		$this->form_validation->set_rules('first_name', 'First Name', 'required|trim');
+		$this->form_validation->set_rules('last_name', 'Last Name', 'required|trim');
+		$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim');
+		$this->form_validation->set_rules('position', 'Position', 'required|trim');
+		$this->form_validation->set_rules('partner_id', 'Partner/Institution', 'required|numeric');
+
+		// Check email uniqueness (exclude current staff)
+		$email = $this->input->post('email');
+		if($email != $staff['email']){
+			$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim|is_unique[staff.email]');
+		}
+
+		if($this->form_validation->run() === FALSE){
+			$this->editStaff($staff_id);
+			return;
+		}
+
+		// Prepare staff data
+		$staff_data = array(
+			'first_name' => $this->input->post('first_name'),
+			'last_name' => $this->input->post('last_name'),
+			'email' => $this->input->post('email'),
+			'phone' => $this->input->post('phone'),
+			'position' => $this->input->post('position'),
+			'department' => $this->input->post('department'),
+			'partner_id' => $this->input->post('partner_id'),
+			'greater_role' => $this->input->post('greater_role'),
+			'employee_number' => $this->input->post('employee_number'),
+			'hire_date' => $this->input->post('hire_date') ? $this->input->post('hire_date') : NULL,
+			'status' => $this->input->post('status')
+		);
+
+		// Update staff member
+		if($this->fmsm_enhanced->update_staff($staff_id, $staff_data)){
+			$this->session->set_flashdata('success', 'Staff member updated successfully.');
+			redirect('users');
+		} else {
+			$this->session->set_flashdata('error', 'Failed to update staff member. Please try again.');
+			$this->editStaff($staff_id);
+		}
+	}
+
+	public function deleteStaff($staff_id){
+		// Only super admin and admin can delete staff
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin()){
+			show_error('Access Denied: Only Super Admin and Admin can delete staff.', 403);
+		}
+
+		if($this->fmsm_enhanced->delete_staff($staff_id)){
+			$this->session->set_flashdata('success', 'Staff member deleted successfully.');
+		} else {
+			$this->session->set_flashdata('error', 'Failed to delete staff member.');
+		}
+
+		redirect('users');
+	}
+
+	// ==================== END STAFF MANAGEMENT METHODS ====================
 
 	function generateUID() {
 		// Generate a unique 5-digit ID
@@ -1850,6 +2764,680 @@ class Fms extends CI_Controller {
 	}
 
 	// ==================== END MONTHLY FINANCIAL REPORTS ====================
+
+	// ==================== REPORT SIGNATURES MANAGEMENT ====================
+
+	public function reportSignatures(){
+		// Coordinators, admins, and super admins can manage signatures
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to manage report signatures.', 403);
+		}
+
+		$this->data['title'] = "FMS - Report Signatures";
+
+		// Get current user's signature
+		$user_id = $this->session->userdata('fms_user_id');
+		$this->data['current_signature'] = $this->fmsm_enhanced->get_signature_by_user_id($user_id);
+
+		$this->load->view('pages/reportsignatures', $this->data);
+	}
+
+	public function saveSignature(){
+		// Coordinators, admins, and super admins can manage signatures
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to manage report signatures.', 403);
+		}
+
+		// Get current user ID
+		$user_id = $this->session->userdata('fms_user_id');
+
+		// Validate inputs
+		$signature_name = $this->input->post('signature_name');
+		$position = $this->input->post('position');
+		$organization = $this->input->post('organization');
+
+		if(empty($signature_name) || empty($position)){
+			$this->session->set_flashdata('error', 'Name and position are required.');
+			redirect('reportSignatures');
+			return;
+		}
+
+		// Get existing signature to check if file exists
+		$existing_signature = $this->fmsm_enhanced->get_signature_by_user_id($user_id);
+		$signature_file = isset($existing_signature['signature_file']) ? $existing_signature['signature_file'] : '';
+
+		// Handle file upload if provided
+		if(isset($_FILES['signature_file']) && $_FILES['signature_file']['error'] == 0){
+			// Validate file type
+			$file_type = $_FILES['signature_file']['type'];
+			$file_extension = strtolower(pathinfo($_FILES['signature_file']['name'], PATHINFO_EXTENSION));
+
+			if($file_extension != 'png' || $file_type != 'image/png'){
+				$this->session->set_flashdata('error', 'Only PNG images are allowed for signatures.');
+				redirect('reportSignatures');
+				return;
+			}
+
+			// Create signatures directory if it doesn't exist
+			$signatures_dir = FCPATH . 'assets/signatures/';
+			if(!is_dir($signatures_dir)){
+				mkdir($signatures_dir, 0777, true);
+			}
+
+			// Delete old signature file if exists
+			if(!empty($signature_file) && file_exists($signatures_dir . $signature_file)){
+				unlink($signatures_dir . $signature_file);
+			}
+
+			// Generate unique filename
+			$signature_file = 'signature_' . $user_id . '_' . time() . '.png';
+			$file_path = $signatures_dir . $signature_file;
+
+			// Move uploaded file
+			if(!move_uploaded_file($_FILES['signature_file']['tmp_name'], $file_path)){
+				$this->session->set_flashdata('error', 'Failed to upload signature file.');
+				redirect('reportSignatures');
+				return;
+			}
+		} else if(empty($signature_file)){
+			// No file uploaded and no existing file
+			$this->session->set_flashdata('error', 'Signature image is required.');
+			redirect('reportSignatures');
+			return;
+		}
+
+		// Save signature configuration in system_settings table
+		$signature_key = 'report_signature_' . $user_id;
+		$signature_value = json_encode([
+			'user_id' => $user_id,
+			'signature_name' => $signature_name,
+			'position' => $position,
+			'organization' => $organization,
+			'signature_file' => $signature_file
+		]);
+
+		if($this->fmsm_enhanced->save_setting($signature_key, $signature_value, 'json', 'Report signature configuration for user ' . $user_id)){
+			$this->session->set_flashdata('success', 'Signature saved successfully.');
+		} else {
+			$this->session->set_flashdata('error', 'Failed to save signature configuration.');
+		}
+
+		redirect('reportSignatures');
+	}
+
+	// ==================== END REPORT SIGNATURES MANAGEMENT ====================
+
+	// ============================================================
+	// OTHER FILES – WORK PACKAGES, FILES & VERSIONS
+	// ============================================================
+
+	/**
+	 * Folder view – 7 Work Package cards.
+	 * Accessible by Super Admin and Local Coordinators only.
+	 */
+	public function otherFiles(){
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to view Other Files.', 403);
+		}
+
+		$this->data['title'] = 'FMS - Other Files';
+
+		$user_id    = $this->session->userdata('fms_user_id');
+		$partner_id = $this->session->userdata('fms_partner_id');
+
+		if($this->auth_manager->is_super_admin()){
+			$this->data['work_packages'] = $this->fmsm_enhanced->get_work_packages();
+		} else {
+			// Coordinator sees counts for their own partner only
+			$this->data['work_packages'] = $this->fmsm_enhanced->get_work_packages($partner_id);
+		}
+
+		$this->load->view('pages/otherfiles', $this->data);
+	}
+
+	/**
+	 * File list view for a specific Work Package.
+	 */
+	public function otherFilesWP($wp_id){
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied: You do not have permission to view Other Files.', 403);
+		}
+
+		$wp = $this->fmsm_enhanced->get_work_package_by_id($wp_id);
+		if(!$wp){
+			show_error('Work Package not found.', 404);
+		}
+
+		$partner_id = $this->session->userdata('fms_partner_id');
+		$user_id    = $this->session->userdata('fms_user_id');
+
+		if($this->auth_manager->is_super_admin()){
+			$files = $this->fmsm_enhanced->get_files_by_wp($wp_id);
+		} else {
+			// Coordinators see only files they uploaded
+			$files = $this->fmsm_enhanced->get_files_by_wp($wp_id, $partner_id, $user_id);
+		}
+
+		$this->data['title']        = 'FMS - Other Files / ' . $wp['code'];
+		$this->data['wp']           = $wp;
+		$this->data['files']        = $files;
+		$this->data['partner_id']   = $partner_id;
+
+		$this->load->view('pages/otherfilesWP', $this->data);
+	}
+
+	/**
+	 * Handle file upload (AJAX POST → JSON).
+	 * - If file_id is provided, creates a new version of an existing file.
+	 * - Otherwise creates a new file record + v1.
+	 */
+	public function uploadOtherFile(){
+		header('Content-Type: application/json');
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']);
+			return;
+		}
+
+		$wp_id       = (int)$this->input->post('wp_id');
+		$file_id     = (int)$this->input->post('file_id');   // 0 → new file
+		$description = $this->input->post('description');
+		$display_name = trim($this->input->post('display_name'));
+		$user_id     = $this->session->userdata('fms_user_id');
+		$partner_id  = $this->session->userdata('fms_partner_id');
+
+		// Validate WP
+		if(!$this->fmsm_enhanced->get_work_package_by_id($wp_id)){
+			echo json_encode(['success' => false, 'message' => 'Invalid work package.']);
+			return;
+		}
+
+		// Validate file was uploaded
+		if(empty($_FILES['upload_file']['name'])){
+			echo json_encode(['success' => false, 'message' => 'No file selected.']);
+			return;
+		}
+
+		$allowed_ext = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','zip','rar','png','jpg','jpeg'];
+		$file_tmp    = $_FILES['upload_file']['tmp_name'];
+		$file_orig   = $_FILES['upload_file']['name'];
+		$file_size   = $_FILES['upload_file']['size'];
+		$file_mime   = $_FILES['upload_file']['type'];
+		$ext         = strtolower(pathinfo($file_orig, PATHINFO_EXTENSION));
+
+		if(!in_array($ext, $allowed_ext)){
+			echo json_encode(['success' => false, 'message' => 'File type not allowed. Allowed: ' . implode(', ', $allowed_ext)]);
+			return;
+		}
+		if($file_size > 20 * 1024 * 1024){
+			echo json_encode(['success' => false, 'message' => 'File too large (max 20 MB).']);
+			return;
+		}
+
+		// Get partner short name for filename
+		$partner_info = $this->fmsm_enhanced->get_all_partners();
+		$partner_short = 'UNK';
+		foreach($partner_info as $p){
+			if($p['partner_id'] == $partner_id){
+				$partner_short = strtoupper($p['short_name'] ?? 'UNK');
+				break;
+			}
+		}
+		// Super admin uploads keep partner from existing file or use SADMIN
+		if($this->auth_manager->is_super_admin() && $file_id > 0){
+			$existing = $this->fmsm_enhanced->get_other_file_by_id($file_id);
+			$partner_short = $existing ? strtoupper($existing['partner_short_name'] ?? 'SADMIN') : 'SADMIN';
+			$partner_id    = $existing ? $existing['partner_id'] : $partner_id;
+		} elseif($this->auth_manager->is_super_admin() && $file_id == 0){
+			$partner_short = 'SADMIN';
+		}
+
+		// Determine version number
+		if($file_id > 0){
+			$version_num = $this->fmsm_enhanced->get_next_version_number($file_id);
+		} else {
+			$version_num = 1;
+		}
+
+		// Build stored filename: PARTNER_YYYYMMDD_HHMMSS_vN.ext
+		$datetime    = date('Ymd_His');
+		$stored_name = $partner_short . '_' . $datetime . '_v' . $version_num . '.' . $ext;
+		$dest_path   = FCPATH . 'assets/otherfiles/' . $stored_name;
+
+		if(!move_uploaded_file($file_tmp, $dest_path)){
+			echo json_encode(['success' => false, 'message' => 'Failed to save file. Check server permissions.']);
+			return;
+		}
+
+		// Create file group record if new upload
+		if($file_id == 0){
+			if(empty($display_name)){
+				$display_name = pathinfo($file_orig, PATHINFO_FILENAME);
+			}
+			$file_id = $this->fmsm_enhanced->create_other_file([
+				'wp_id'        => $wp_id,
+				'partner_id'   => $partner_id,
+				'display_name' => $display_name,
+				'description'  => $description,
+				'uploaded_by'  => $user_id,
+			]);
+		}
+
+		// Create version record
+		$this->fmsm_enhanced->create_file_version([
+			'file_id'        => $file_id,
+			'version_number' => $version_num,
+			'stored_name'    => $stored_name,
+			'original_ext'   => $ext,
+			'file_size'      => $file_size,
+			'mime_type'      => $file_mime,
+			'description'    => $description,
+			'uploaded_by'    => $user_id,
+		]);
+
+		echo json_encode([
+			'success'      => true,
+			'message'      => 'File uploaded successfully as version v' . $version_num . '.',
+			'stored_name'  => $stored_name,
+			'version'      => $version_num,
+			'file_id'      => $file_id,
+		]);
+	}
+
+	/**
+	 * Return JSON list of all versions for a file (AJAX).
+	 */
+	public function getFileVersions($file_id){
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']);
+			return;
+		}
+
+		$file     = $this->fmsm_enhanced->get_other_file_by_id($file_id);
+		$versions = $this->fmsm_enhanced->get_file_versions($file_id);
+
+		echo json_encode([
+			'success'  => true,
+			'file'     => $file,
+			'versions' => $versions,
+		]);
+	}
+
+	/**
+	 * Serve a file for download.
+	 */
+	public function downloadOtherFileVersion($version_id){
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			show_error('Access Denied.', 403);
+		}
+
+		$version = $this->fmsm_enhanced->get_version_by_id($version_id);
+		if(!$version){
+			show_error('Version not found.', 404);
+		}
+
+		$file_path = FCPATH . 'assets/otherfiles/' . $version['stored_name'];
+		if(!file_exists($file_path)){
+			show_error('File not found on server.', 404);
+		}
+
+		$this->load->helper('download');
+		force_download($file_path, NULL);
+	}
+
+	/**
+	 * Delete a file group and all its versions (Super Admin only).
+	 */
+	public function deleteOtherFile($file_id){
+		if(!$this->auth_manager->is_super_admin()){
+			show_error('Access Denied: Only Super Admins can delete files.', 403);
+		}
+
+		// Delete physical files from disk
+		$versions = $this->fmsm_enhanced->get_file_versions($file_id);
+		foreach($versions as $v){
+			$path = FCPATH . 'assets/otherfiles/' . $v['stored_name'];
+			if(file_exists($path)){
+				unlink($path);
+			}
+		}
+
+		if($this->fmsm_enhanced->delete_other_file($file_id)){
+			$this->session->set_flashdata('success', 'File and all its versions deleted successfully.');
+		} else {
+			$this->session->set_flashdata('error', 'Failed to delete file.');
+		}
+
+		// Return to referrer or generic WP list
+		$ref = $this->input->server('HTTP_REFERER');
+		redirect($ref ? $ref : 'otherFiles');
+	}
+
+	// ==================== END OTHER FILES ====================
+
+	// ============================================================
+	// OTHER FILE COMMENTS
+	// ============================================================
+
+	/** Return JSON comments for a file */
+	public function getFileComments($file_id){
+		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
+		}
+		$comments = $this->fmsm_enhanced->get_comments_by_file($file_id);
+		echo json_encode(['success' => true, 'comments' => $comments]);
+	}
+
+	/** Add a comment (Super Admin only) */
+	public function addFileComment(){
+		if(!$this->auth_manager->is_super_admin()){
+			echo json_encode(['success' => false, 'message' => 'Only Super Admins can add comments.']); return;
+		}
+		$file_id = (int)$this->input->post('file_id');
+		$comment = trim($this->input->post('comment'));
+		if(!$file_id || empty($comment)){
+			echo json_encode(['success' => false, 'message' => 'Comment cannot be empty.']); return;
+		}
+		$id = $this->fmsm_enhanced->add_file_comment([
+			'file_id'  => $file_id,
+			'user_id'  => $this->session->userdata('fms_user_id'),
+			'comment'  => $comment,
+		]);
+		if($id){
+			$comments = $this->fmsm_enhanced->get_comments_by_file($file_id);
+			echo json_encode(['success' => true, 'message' => 'Comment added.', 'comments' => $comments]);
+		} else {
+			echo json_encode(['success' => false, 'message' => 'Failed to save comment.']);
+		}
+	}
+
+	/** Delete a comment (Super Admin only) */
+	public function deleteFileComment($comment_id){
+		if(!$this->auth_manager->is_super_admin()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
+		}
+		$ok = $this->fmsm_enhanced->delete_file_comment($comment_id);
+		echo json_encode(['success' => $ok]);
+	}
+
+	// ==================== END COMMENTS ====================
+
+	// ============================================================
+	// PROFILE
+	// ============================================================
+
+	public function profile(){
+		$this->data['title'] = 'FMS - My Profile';
+
+		$user_id  = $this->session->userdata('fms_user_id');
+		$staff_id = $this->session->userdata('fms_staff_id');
+
+		$this->data['profile_user']  = $this->fmsm_enhanced->get_user_by_id($user_id);
+		$this->data['profile_staff'] = $this->fmsm_enhanced->get_staff_by_id($staff_id);
+
+		$this->load->view('pages/profile', $this->data);
+	}
+
+	/** Update personal info (name, phone, position) */
+	public function updateProfile(){
+		$user_id  = $this->session->userdata('fms_user_id');
+		$staff_id = $this->session->userdata('fms_staff_id');
+
+		$first_name = trim($this->input->post('first_name'));
+		$last_name  = trim($this->input->post('last_name'));
+		$phone      = trim($this->input->post('phone'));
+		$department = trim($this->input->post('department'));
+
+		if(empty($first_name) || empty($last_name)){
+			$this->session->set_flashdata('profile_error', 'First name and last name are required.');
+			redirect('profile');
+		}
+
+		$this->db->where('staff_id', $staff_id)->update('staff', [
+			'first_name' => $first_name,
+			'last_name'  => $last_name,
+			'phone'      => $phone,
+			'department' => $department,
+		]);
+
+		// Refresh session name fields
+		$this->session->set_userdata([
+			'fms_fname' => $first_name,
+			'fms_lname' => $last_name,
+			'fms_name'  => $first_name . ' ' . $last_name,
+		]);
+
+		$this->session->set_flashdata('profile_success', 'Profile updated successfully.');
+		redirect('profile');
+	}
+
+	/** Change password */
+	public function updatePassword(){
+		$user_id      = $this->session->userdata('fms_user_id');
+		$current_pass = $this->input->post('current_password');
+		$new_pass     = $this->input->post('new_password');
+		$confirm_pass = $this->input->post('confirm_password');
+
+		if(empty($current_pass) || empty($new_pass) || empty($confirm_pass)){
+			$this->session->set_flashdata('password_error', 'All password fields are required.');
+			redirect('profile#change-password');
+		}
+
+		if($new_pass !== $confirm_pass){
+			$this->session->set_flashdata('password_error', 'New password and confirmation do not match.');
+			redirect('profile#change-password');
+		}
+
+		if(strlen($new_pass) < 6){
+			$this->session->set_flashdata('password_error', 'New password must be at least 6 characters.');
+			redirect('profile#change-password');
+		}
+
+		// Verify current password
+		$row = $this->db->where('user_id', $user_id)
+		               ->where('password', sha1($current_pass))
+		               ->get('users')->row_array();
+
+		if(!$row){
+			$this->session->set_flashdata('password_error', 'Current password is incorrect.');
+			redirect('profile#change-password');
+		}
+
+		$this->db->where('user_id', $user_id)->update('users', ['password' => sha1($new_pass)]);
+
+		$this->session->set_flashdata('password_success', 'Password changed successfully.');
+		redirect('profile#change-password');
+	}
+
+	// ==================== END PROFILE ====================
+
+	// ============================================
+	// FOREX EXCHANGE
+	// ============================================
+
+	public function forexExchange(){
+		if(!$this->auth_manager->is_super_admin()){
+			show_error('Access Denied', 403);
+		}
+		$this->data['title']  = 'FMS - Forex Exchange';
+		$this->data['rates']  = $this->fmsm_enhanced->get_all_forex_rates();
+		$this->data['stats']  = $this->fmsm_enhanced->get_forex_stats();
+		$this->load->view('pages/forexexchange', $this->data);
+	}
+
+	public function saveForexRate(){
+		if(!$this->auth_manager->is_super_admin()){
+			show_error('Access Denied', 403);
+		}
+		$date    = $this->input->post('rate_date', TRUE);
+		$rate    = $this->input->post('rwf_per_eur', TRUE);
+		$user_id = $this->session->userdata('fms_user_id');
+
+		if(empty($date) || empty($rate)){
+			$this->session->set_flashdata('error', 'Date and rate are required.');
+			redirect('forexExchange');
+			return;
+		}
+		if(!is_numeric($rate) || floatval($rate) <= 0){
+			$this->session->set_flashdata('error', 'Rate must be a positive number.');
+			redirect('forexExchange');
+			return;
+		}
+		$date_obj = DateTime::createFromFormat('Y-m-d', $date);
+		if(!$date_obj){
+			$this->session->set_flashdata('error', 'Invalid date format.');
+			redirect('forexExchange');
+			return;
+		}
+
+		$this->fmsm_enhanced->save_forex_rate($date, floatval($rate), $user_id);
+		$this->session->set_flashdata('success', 'Rate for ' . date('d M Y', strtotime($date)) . ' saved successfully.');
+		redirect('forexExchange');
+	}
+
+	public function uploadForexExcel(){
+		if(!$this->auth_manager->is_super_admin()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
+		}
+		if(!$this->input->is_ajax_request()){
+			show_error('Invalid request', 403);
+		}
+		if(empty($_FILES['forex_file']['name'])){
+			echo json_encode(['success' => false, 'message' => 'No file uploaded.']); return;
+		}
+		if($_FILES['forex_file']['error'] !== UPLOAD_ERR_OK){
+			echo json_encode(['success' => false, 'message' => 'Upload error.']); return;
+		}
+
+		require_once FCPATH . 'vendor/autoload.php';
+
+		try {
+			$spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($_FILES['forex_file']['tmp_name']);
+			$sheet       = $spreadsheet->getActiveSheet();
+			$rows        = [];
+
+			foreach($sheet->getRowIterator(2) as $row){ // skip header row 1
+				$cells = $row->getCellIterator();
+				$cells->setIterateOnlyExistingCells(false);
+				$cols = [];
+				foreach($cells as $cell){ $cols[] = $cell->getValue(); }
+
+				$raw_date = $cols[0] ?? '';
+				$raw_rate = $cols[1] ?? '';
+
+				if(empty($raw_date) && empty($raw_rate)) continue; // blank row
+
+				// Parse date — could be Excel serial or string
+				$date_str = '';
+				if(is_numeric($raw_date) && $raw_date > 0){
+					$dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($raw_date);
+					$date_str = $dt->format('Y-m-d');
+				} elseif(!empty($raw_date)){
+					// Try common string formats
+					$dt = date_create($raw_date);
+					$date_str = $dt ? $dt->format('Y-m-d') : '';
+				}
+
+				if(empty($date_str) || !is_numeric($raw_rate) || floatval($raw_rate) <= 0) continue;
+
+				$rows[] = ['date' => $date_str, 'rate' => floatval($raw_rate)];
+			}
+
+			if(empty($rows)){
+				echo json_encode(['success' => false, 'message' => 'No valid rows found in the file. Make sure column A = Date and column B = Rate (RWF per EUR).']);
+				return;
+			}
+
+			$user_id = $this->session->userdata('fms_user_id');
+			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id);
+
+			$msg = $result['inserted'] . ' rate(s) added, ' . $result['updated'] . ' updated.';
+			if(!empty($result['errors'])){
+				$msg .= ' Skipped ' . count($result['errors']) . ' invalid row(s).';
+			}
+			echo json_encode(['success' => true, 'message' => $msg]);
+
+		} catch(Exception $e){
+			echo json_encode(['success' => false, 'message' => 'Could not read file: ' . $e->getMessage()]);
+		}
+	}
+
+	public function deleteForexRate($id){
+		if(!$this->auth_manager->is_super_admin()){
+			show_error('Access Denied', 403);
+		}
+		$this->fmsm_enhanced->delete_forex_rate($id);
+		$this->session->set_flashdata('success', 'Rate deleted.');
+		redirect('forexExchange');
+	}
+
+	public function downloadForexTemplate(){
+		if(!$this->auth_manager->is_super_admin()){
+			show_error('Access Denied', 403);
+		}
+		require_once FCPATH . 'vendor/autoload.php';
+
+		$spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet = $spreadsheet->getActiveSheet();
+		$sheet->setTitle('Forex Rates');
+
+		// Header row
+		$sheet->setCellValue('A1', 'Date (YYYY-MM-DD)');
+		$sheet->setCellValue('B1', 'Rate (1 EUR = X RWF)');
+
+		// Style header
+		$headerStyle = [
+			'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+			'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '696cff']],
+		];
+		$sheet->getStyle('A1:B1')->applyFromArray($headerStyle);
+		$sheet->getColumnDimension('A')->setWidth(22);
+		$sheet->getColumnDimension('B')->setWidth(24);
+
+		// Sample rows
+		$samples = [
+			['2023-01-01', 1120.50],
+			['2023-01-02', 1121.00],
+			['2023-01-03', 1119.75],
+		];
+		$r = 2;
+		foreach($samples as $s){
+			$sheet->setCellValue('A'.$r, $s[0]);
+			$sheet->setCellValue('B'.$r, $s[1]);
+			$r++;
+		}
+
+		// Freeze header
+		$sheet->freezePane('A2');
+
+		$writer   = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+		$filename = 'forex_rates_template.xlsx';
+
+		header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Cache-Control: max-age=0');
+		$writer->save('php://output');
+		exit;
+	}
+
+	public function getForexRate(){
+		$date = $this->input->get('date', TRUE);
+		if(empty($date)){
+			echo json_encode(['success' => false, 'message' => 'No date provided.']);
+			return;
+		}
+		$row = $this->db->query(
+			"SELECT rwf_per_eur, rate_date FROM forex_rates WHERE rate_date <= ? ORDER BY rate_date DESC LIMIT 1",
+			[$date]
+		)->row_array();
+
+		if($row){
+			echo json_encode(['success' => true, 'rate' => (float)$row['rwf_per_eur'], 'rate_date' => $row['rate_date']]);
+		} else {
+			echo json_encode(['success' => false, 'message' => 'No exchange rate found for this date or earlier.']);
+		}
+	}
+
+	// ==================== END FOREX ====================
 
 	public function logout(){
 		$this->session->sess_destroy();

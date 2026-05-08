@@ -122,7 +122,7 @@ class Auth_manager {
      * Check if user can upload expenses
      */
     public function can_upload_expenses(){
-        return $this->is_admin() || $this->is_coordinator();
+        return $this->is_super_admin() || $this->is_admin() || $this->is_coordinator();
     }
 
     /**

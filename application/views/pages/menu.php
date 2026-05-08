@@ -19,10 +19,10 @@
                     </a>
                   </li>
 
-                  <!-- ==================== EXPENSES ==================== -->
-                  <!-- Available to: Coordinator, Admin, Super Admin -->
+                  <!-- ==================== EXPENSES & REPORTS ==================== -->
+                  <!-- Coordinators upload, Super Admin approves -->
                   <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin() || $this->auth_manager->is_coordinator()): ?>
-                  <li class="menu-item <?=($this->router->fetch_method()=='expenses' || $this->router->fetch_method()=='newExpense' || $this->router->fetch_method()=='saveExpense')?'active':'';?>">
+                  <li class="menu-item <?=($this->router->fetch_method()=='expenses' || $this->router->fetch_method()=='newExpense' || $this->router->fetch_method()=='saveExpense' || $this->router->fetch_method()=='generateReport')?'active':'';?>">
                     <a href="<?=base_url('expenses');?>" class="menu-link">
                       <i class="menu-icon tf-icons ti ti-receipt"></i>
                       <div data-i18n="Expenses">Expenses</div>
@@ -30,68 +30,40 @@
                   </li>
                   <?php endif; ?>
 
-                  <!-- ==================== MONTHLY REPORTS ==================== -->
-                  <!-- Available to: Coordinator, Admin, Super Admin (V2 with file attachments) -->
-                  <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin() || $this->auth_manager->is_coordinator()): ?>
-                  <li class="menu-item <?=($this->router->fetch_method()=='monthlyReports' || $this->router->fetch_method()=='viewMonthlyReport' || $this->router->fetch_method()=='generateMonthlyReport')?'active':'';?>">
-                    <a href="<?=base_url('monthlyReports');?>" class="menu-link">
-                      <i class="menu-icon tf-icons ti ti-file-text"></i>
-                      <div data-i18n="MonthlyReports">Monthly Reports</div>
-                    </a>
-                  </li>
-                  <?php endif; ?>
 
-                  <!-- ==================== WORK PACKAGES / EVENTS ==================== -->
-                  <!-- Available to: Coordinator, Admin, Super Admin -->
-                  <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin() || $this->auth_manager->is_coordinator()): ?>
+                  <!-- ==================== OTHER FILES ==================== -->
+                  <!-- Available to: Super Admin and Local Coordinators -->
+                  <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_coordinator()): ?>
                   <li class="menu-item">
                     <a href="javascript:void(0)" class="menu-link menu-toggle">
-                      <i class="menu-icon tf-icons ti ti-folder"></i>
-                      <div data-i18n="WorkPackages">Work Packages</div>
+                      <i class="menu-icon tf-icons ti ti-folder-open"></i>
+                      <div data-i18n="OtherFiles">Other Files</div>
                     </a>
                     <ul class="menu-sub">
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP1">WP 1 - Management</div>
+                      <li class="menu-item <?=($this->router->fetch_method()=='otherFiles')?'active':'';?>">
+                        <a href="<?=base_url('otherFiles');?>" class="menu-link">
+                          <i class="menu-icon tf-icons ti ti-layout-grid"></i>
+                          <div data-i18n="AllWPs">All Work Packages</div>
                         </a>
                       </li>
+                      <?php
+                      $wps = [
+                        1 => 'WP1 - Management and coordination',
+                        2 => 'WP2 - Collaboration design',
+                        3 => 'WP3 - Infrastructures',
+                        4 => 'WP4 - Curricula design',
+                        5 => 'WP5 - Training and coaching',
+                        6 => 'WP6 - Transfer methodologies',
+                        7 => 'WP7 - Impact and dissemination',
+                      ];
+                      foreach($wps as $wpid => $wplabel): ?>
                       <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP2">WP 2 - Collaboration</div>
+                        <a href="<?=base_url('otherFilesWP/'.$wpid);?>" class="menu-link">
+                          <i class="menu-icon tf-icons ti ti-folder"></i>
+                          <div><?=$wplabel;?></div>
                         </a>
                       </li>
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP3">WP 3 - Implementation</div>
-                        </a>
-                      </li>
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP4">WP 4 - Support</div>
-                        </a>
-                      </li>
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP5">WP 5 - Training</div>
-                        </a>
-                      </li>
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP6">WP 6 - Monitoring</div>
-                        </a>
-                      </li>
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="WP7">WP 7 - Evaluation</div>
-                        </a>
-                      </li>
+                      <?php endforeach; ?>
                     </ul>
                   </li>
                   <?php endif; ?>
@@ -103,49 +75,43 @@
                     <span class="menu-header-text">Administration</span>
                   </li>
 
-                  <!-- Users Management -->
-                  <li class="menu-item <?=($this->router->fetch_method()=='users' || $this->router->fetch_method()=='newUser' || $this->router->fetch_method()=='editUser')?'active':'';?>">
+                  <!-- Users Management - Available to Coordinators, Admin, Super Admin -->
+                  <li class="menu-item <?=($this->router->fetch_method()=='users' || $this->router->fetch_method()=='newUser' || $this->router->fetch_method()=='editUser' || $this->router->fetch_method()=='staff' || $this->router->fetch_method()=='newStaff')?'active':'';?>">
                     <a href="<?=base_url('users');?>" class="menu-link">
                       <i class="menu-icon tf-icons ti ti-users"></i>
                       <div data-i18n="Users">Users</div>
                     </a>
                   </li>
-
-                  <!-- Staff Management -->
-                  <li class="menu-item <?=($this->router->fetch_method()=='staff' || $this->router->fetch_method()=='newStaff')?'active':'';?>">
-                    <a href="<?=base_url('staff');?>" class="menu-link">
-                      <i class="menu-icon tf-icons ti ti-user-check"></i>
-                      <div data-i18n="Staff">Staff</div>
-                    </a>
-                  </li>
                   <?php endif; ?>
 
-                  <!-- ==================== ADMIN ONLY SECTION ==================== -->
-                  <!-- Only for Super Admin and Admin -->
-                  <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()): ?>
+                  <!-- ==================== SETTINGS SECTION ==================== -->
+                  <!-- Settings menu visible to Coordinators, Admins, and Super Admins -->
+                  <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin() || $this->auth_manager->is_coordinator()): ?>
                   <li class="menu-header small text-uppercase">
-                    <span class="menu-header-text">Admin</span>
+                    <span class="menu-header-text"><?=($this->auth_manager->is_coordinator() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_super_admin()) ? 'Settings' : 'Admin';?></span>
                   </li>
 
-                  <!-- Settings/Configuration (placeholder for future use) -->
+                  <!-- Settings/Configuration -->
                   <li class="menu-item">
                     <a href="javascript:void(0)" class="menu-link menu-toggle">
                       <i class="menu-icon tf-icons ti ti-settings"></i>
                       <div data-i18n="Settings">Settings</div>
                     </a>
                     <ul class="menu-sub">
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
+                      <li class="menu-item <?=($this->router->fetch_method()=='reportSignatures')?'active':'';?>">
+                        <a href="<?=base_url('reportSignatures');?>" class="menu-link">
                           <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="SystemSettings">System Settings</div>
+                          <div data-i18n="ReportSignatures">Report Signatures</div>
                         </a>
                       </li>
-                      <li class="menu-item">
-                        <a href="javascript:void(0);" class="menu-link">
-                          <i class="menu-icon tf-icons ti ti-arrow-right"></i>
-                          <div data-i18n="Reports">Reports & Analytics</div>
+                      <?php if($this->auth_manager->is_super_admin()): ?>
+                      <li class="menu-item <?=($this->router->fetch_method()=='forexExchange')?'active':'';?>">
+                        <a href="<?=base_url('forexExchange');?>" class="menu-link">
+                          <i class="menu-icon tf-icons ti ti-currency-euro"></i>
+                          <div data-i18n="ForexExchange">Forex Exchange</div>
                         </a>
                       </li>
+                      <?php endif; ?>
                     </ul>
                   </li>
                   <?php endif; ?>

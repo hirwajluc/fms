@@ -6,8 +6,20 @@ system/logs/*
 
 
 
-# Database backups
+# Database backups (allow in db/ folder)
 *.sql
+!db/*.sql
+
+# Generated report PDFs (large, regenerated on demand)
+assets/reports/*.pdf
+
+# Uploaded user files (managed outside git)
+assets/uploads/*
+!assets/uploads/.gitkeep
+assets/signatures/*
+!assets/signatures/.gitkeep
+assets/otherfiles/*
+!assets/otherfiles/.gitkeep
 
 # IDE and OS files
 .vscode/
