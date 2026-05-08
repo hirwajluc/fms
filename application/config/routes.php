@@ -132,5 +132,9 @@ $route['downloadForexTemplate']      = 'fms/downloadForexTemplate';
 // Logout
 $route['logout'] = 'fms/logout';
 
+// Forgot password
+$route['forgotPassword']      = 'login/forgotPassword';
+$route['processForgotPassword'] = 'login/processForgotPassword';
+
 $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;

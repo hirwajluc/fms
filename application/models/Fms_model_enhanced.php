@@ -97,6 +97,39 @@ class Fms_model_enhanced extends CI_Model{
         return $query->result_array();
     }
 
+    public function get_user_by_email($email){
+        return $this->db
+            ->select('users.*, staff.first_name, staff.last_name, staff.email AS staff_email')
+            ->join('staff', 'staff.staff_id = users.staff_id', 'left')
+            ->where('users.email', $email)
+            ->get('users')->row_array();
+    }
+
+    public function update_user_password($user_id, $hashed_password){
+        return $this->db->where('user_id', $user_id)
+                        ->update('users', ['password' => $hashed_password]);
+    }
+
+    /** Return emails of all super admins and admins */
+    public function get_admin_emails(){
+        $rows = $this->db->select('users.email')
+                         ->where_in('users.role_id', [1, 2])
+                         ->where('users.status', 'active')
+                         ->get('users')->result_array();
+        return array_column($rows, 'email');
+    }
+
+    /** Return emails of coordinators for a given partner */
+    public function get_coordinator_emails($partner_id){
+        $rows = $this->db->select('users.email')
+                         ->join('staff', 'staff.staff_id = users.staff_id', 'inner')
+                         ->where('users.role_id', 3)
+                         ->where('staff.partner_id', $partner_id)
+                         ->where('users.status', 'active')
+                         ->get('users')->result_array();
+        return array_column($rows, 'email');
+    }
+
     public function get_user_by_id($user_id){
         return $this->db->select("users.*,
             roles.role_name,

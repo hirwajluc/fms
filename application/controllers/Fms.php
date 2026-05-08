@@ -468,6 +468,14 @@ class Fms extends CI_Controller {
 			$this->session->set_flashdata('error', 'Failed to save timesheet to database.');
 			redirect('newTimesheet');
 		} else {
+			// Notify coordinators and admins of new submission
+			$timesheet_row = $this->fmsm_enhanced->get_timesheet_by_id($timesheet_id);
+			$submitter_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+			$admin_emails = $this->fmsm_enhanced->get_admin_emails();
+			$coord_emails = $this->fmsm_enhanced->get_coordinator_emails($user['partner_id'] ?? 0);
+			$recipients   = array_unique(array_merge($admin_emails, $coord_emails));
+			if($timesheet_row) $this->fms_mailer->timesheet_submitted($timesheet_row, $submitter_name, $recipients);
+
 			$this->session->set_flashdata('success', 'Timesheet submitted successfully and pending approval.');
 			redirect('timesheets');
 		}
@@ -486,6 +494,13 @@ class Fms extends CI_Controller {
 		$signature = $this->fmsm_enhanced->get_signature_by_user_id($approver_id);
 
 		if($this->fmsm_enhanced->approve_timesheet($timesheet_id, $approver_id, $comments, $signature)){
+			// Notify the staff member
+			$ts   = $this->fmsm_enhanced->get_timesheet_by_id($timesheet_id);
+			$owner = $ts ? $this->fmsm_enhanced->get_user_by_id($ts['user_id']) : null;
+			if($owner && !empty($owner['email'])){
+				$name = trim(($owner['first_name'] ?? '') . ' ' . ($owner['last_name'] ?? ''));
+				$this->fms_mailer->timesheet_approved($ts, $owner['email'], $name);
+			}
 			$this->session->set_flashdata('success', 'Timesheet approved successfully.');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to approve timesheet.');
@@ -509,6 +524,13 @@ class Fms extends CI_Controller {
 		}
 
 		if($this->fmsm_enhanced->reject_timesheet($timesheet_id, $comments)){
+			// Notify the staff member
+			$ts   = $this->fmsm_enhanced->get_timesheet_by_id($timesheet_id);
+			$owner = $ts ? $this->fmsm_enhanced->get_user_by_id($ts['user_id']) : null;
+			if($owner && !empty($owner['email'])){
+				$name = trim(($owner['first_name'] ?? '') . ' ' . ($owner['last_name'] ?? ''));
+				$this->fms_mailer->timesheet_rejected($ts, $owner['email'], $name, $comments);
+			}
 			$this->session->set_flashdata('success', 'Timesheet rejected.');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to reject timesheet.');
@@ -1312,6 +1334,15 @@ class Fms extends CI_Controller {
 		$signature = $this->fmsm_enhanced->get_signature_by_user_id($approver_id);
 
 		if($this->fmsm_enhanced->approve_expense($expense_id, $approver_id, $comments, $signature)){
+			// Notify the submitter
+			$exp   = $this->fmsm_enhanced->get_expense_by_id($expense_id);
+			if($exp && !empty($exp['uploaded_by'])){
+				$owner = $this->fmsm_enhanced->get_user_by_id($exp['uploaded_by']);
+				if($owner && !empty($owner['email'])){
+					$name = trim(($owner['first_name'] ?? '') . ' ' . ($owner['last_name'] ?? ''));
+					$this->fms_mailer->expense_approved($exp, $owner['email'], $name);
+				}
+			}
 			$this->session->set_flashdata('success', 'Expense approved successfully.');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to approve expense.');
@@ -1329,6 +1360,15 @@ class Fms extends CI_Controller {
 		$comments = $this->input->post('comments');
 
 		if($this->fmsm_enhanced->reject_expense($expense_id, $comments)){
+			// Notify the submitter
+			$exp   = $this->fmsm_enhanced->get_expense_by_id($expense_id);
+			if($exp && !empty($exp['uploaded_by'])){
+				$owner = $this->fmsm_enhanced->get_user_by_id($exp['uploaded_by']);
+				if($owner && !empty($owner['email'])){
+					$name = trim(($owner['first_name'] ?? '') . ' ' . ($owner['last_name'] ?? ''));
+					$this->fms_mailer->expense_rejected($exp, $owner['email'], $name, $comments ?? '');
+				}
+			}
 			$this->session->set_flashdata('success', 'Expense rejected.');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to reject expense.');
@@ -2046,6 +2086,14 @@ class Fms extends CI_Controller {
 			);
 
 			if($this->fmsm_enhanced->create_user($user_data)){
+				// Welcome email
+				$role_names = [1=>'Super Admin',2=>'Admin',3=>'Institution Coordinator',4=>'Member'];
+				$this->fms_mailer->account_created(
+					$this->input->post('email'),
+					$this->input->post('first_name') . ' ' . $this->input->post('last_name'),
+					$this->input->post('password'),
+					$role_names[$role_id] ?? 'Member'
+				);
 				$this->session->set_flashdata('success', 'User created successfully.');
 				redirect('users');
 			} else {
@@ -2672,6 +2720,13 @@ class Fms extends CI_Controller {
 			$this->session->userdata('fms_user_id')
 		);
 
+		// Notify admins
+		$submitter = $this->fmsm_enhanced->get_user_by_id($this->session->userdata('fms_user_id'));
+		$submitter_name = $submitter ? trim(($submitter['first_name'] ?? '') . ' ' . ($submitter['last_name'] ?? '')) : 'Coordinator';
+		$fresh_report = $this->fmsm_enhanced->get_monthly_report($report_id);
+		$admin_emails = $this->fmsm_enhanced->get_admin_emails();
+		if($fresh_report) $this->fms_mailer->monthly_report_submitted($fresh_report, $submitter_name, $admin_emails);
+
 		$this->session->set_flashdata('success', 'Report submitted for approval');
 		redirect('viewMonthlyReport/' . $report_id);
 	}
@@ -2707,6 +2762,16 @@ class Fms extends CI_Controller {
 			$notes
 		);
 
+		// Notify coordinator
+		$fresh_report = $this->fmsm_enhanced->get_monthly_report($report_id);
+		if($fresh_report && !empty($fresh_report['partner_id'])){
+			$coord_emails = $this->fmsm_enhanced->get_coordinator_emails($fresh_report['partner_id']);
+			foreach($coord_emails as $cemail){
+				$coord = $this->fmsm_enhanced->get_user_by_email($cemail);
+				$cname = $coord ? trim(($coord['first_name'] ?? '') . ' ' . ($coord['last_name'] ?? '')) : '';
+				$this->fms_mailer->monthly_report_approved($fresh_report, $cemail, $cname);
+			}
+		}
 		$this->session->set_flashdata('success', 'Report approved successfully');
 		redirect('viewMonthlyReport/' . $report_id);
 	}
@@ -2743,6 +2808,16 @@ class Fms extends CI_Controller {
 		// Reject report
 		$this->fmsm_enhanced->reject_monthly_report($report_id, $rejection_comments);
 
+		// Notify coordinator
+		$fresh_report = $this->fmsm_enhanced->get_monthly_report($report_id);
+		if($fresh_report && !empty($fresh_report['partner_id'])){
+			$coord_emails = $this->fmsm_enhanced->get_coordinator_emails($fresh_report['partner_id']);
+			foreach($coord_emails as $cemail){
+				$coord = $this->fmsm_enhanced->get_user_by_email($cemail);
+				$cname = $coord ? trim(($coord['first_name'] ?? '') . ' ' . ($coord['last_name'] ?? '')) : '';
+				$this->fms_mailer->monthly_report_rejected($fresh_report, $cemail, $cname, $rejection_comments);
+			}
+		}
 		$this->session->set_flashdata('success', 'Report rejected. User can edit and resubmit');
 		redirect('viewMonthlyReport/' . $report_id);
 	}

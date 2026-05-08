@@ -71,4 +71,51 @@ class Login extends CI_Controller {
 			redirect('login?status=error');
 		}
 	}
+
+	private function _mailer(){
+		if(!isset($this->fms_mailer)){
+			$this->load->library('fms_mailer');
+		}
+	}
+
+	public function forgotPassword(){
+		$this->data['title'] = 'Forgot Password – GREATER FMS';
+		$this->load->view('forgot_password', $this->data);
+	}
+
+	public function processForgotPassword(){
+		$email = trim($this->input->post('email', TRUE));
+
+		if(empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)){
+			$this->session->set_flashdata('msg', 'Please enter a valid email address.');
+			redirect('forgotPassword');
+			return;
+		}
+
+		// Look up user
+		$user = $this->fmsm_enhanced->get_user_by_email($email);
+		if(!$user){
+			// Don't reveal if email exists — show generic success message
+			$this->session->set_flashdata('success', 'If that email is registered, a new password has been sent.');
+			redirect('forgotPassword');
+			return;
+		}
+
+		// Generate a random password
+		$chars       = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
+		$new_password = '';
+		for($i = 0; $i < 10; $i++){
+			$new_password .= $chars[random_int(0, strlen($chars) - 1)];
+		}
+
+		// Save hashed password
+		$this->fmsm_enhanced->update_user_password($user['user_id'], sha1($new_password));
+
+		// Send email
+		$full_name = ($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '');
+		$this->fms_mailer->password_reset($email, trim($full_name), $new_password);
+
+		$this->session->set_flashdata('success', 'A new password has been sent to your email address.');
+		redirect('forgotPassword');
+	}
 }
