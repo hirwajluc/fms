@@ -2076,25 +2076,31 @@ class Fms extends CI_Controller {
 		$staff_id = $this->fmsm_enhanced->create_staff($staff_data);
 
 		if($staff_id){
+			// Generate a temporary password (ignore admin-entered value for security)
+			$chars    = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
+			$tmp_pass = '';
+			for($i = 0; $i < 10; $i++) $tmp_pass .= $chars[random_int(0, strlen($chars) - 1)];
+
 			// Create user account
 			$user_data = array(
-				'staff_id' => $staff_id,
-				'email' => $this->input->post('email'),
-				'password' => sha1($this->input->post('password')),
-				'role_id' => $role_id,
-				'status' => 'active'
+				'staff_id'              => $staff_id,
+				'email'                 => $this->input->post('email'),
+				'password'              => sha1($tmp_pass),
+				'role_id'               => $role_id,
+				'status'                => 'active',
+				'force_password_change' => 1,
 			);
 
 			if($this->fmsm_enhanced->create_user($user_data)){
-				// Welcome email
+				// Send welcome email with temporary password
 				$role_names = [1=>'Super Admin',2=>'Admin',3=>'Institution Coordinator',4=>'Member'];
 				$this->fms_mailer->account_created(
 					$this->input->post('email'),
 					$this->input->post('first_name') . ' ' . $this->input->post('last_name'),
-					$this->input->post('password'),
+					$tmp_pass,
 					$role_names[$role_id] ?? 'Member'
 				);
-				$this->session->set_flashdata('success', 'User created successfully.');
+				$this->session->set_flashdata('success', 'User created successfully. A temporary password has been sent to their email.');
 				redirect('users');
 			} else {
 				$this->session->set_flashdata('error', 'Failed to create user account.');
@@ -3317,7 +3323,15 @@ class Fms extends CI_Controller {
 			redirect('profile#change-password');
 		}
 
-		$this->db->where('user_id', $user_id)->update('users', ['password' => sha1($new_pass)]);
+		$this->db->where('user_id', $user_id)->update('users', ['password' => sha1($new_pass), 'force_password_change' => 0]);
+		$this->session->unset_userdata('fms_force_change');
+
+		// Notify user by email
+		$user = $this->fmsm_enhanced->get_user_by_id($user_id);
+		if($user && !empty($user['email'])){
+			$name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+			$this->fms_mailer->password_changed($user['email'], $name);
+		}
 
 		$this->session->set_flashdata('password_success', 'Password changed successfully.');
 		redirect('profile#change-password');
@@ -3513,6 +3527,132 @@ class Fms extends CI_Controller {
 	}
 
 	// ==================== END FOREX ====================
+
+	// ============================================================
+	// FORCED PASSWORD CHANGE (first login / after reset)
+	// ============================================================
+
+	public function changePassword(){
+		$this->data['title'] = 'Set Your New Password – GREATER FMS';
+		$this->load->view('pages/change_password_forced', $this->data);
+	}
+
+	public function processChangePassword(){
+		$user_id      = $this->session->userdata('fms_user_id');
+		$new_pass     = $this->input->post('new_password');
+		$confirm_pass = $this->input->post('confirm_password');
+
+		if(empty($new_pass) || empty($confirm_pass)){
+			$this->session->set_flashdata('error', 'Both password fields are required.');
+			redirect('changePassword');
+			return;
+		}
+		if(strlen($new_pass) < 6){
+			$this->session->set_flashdata('error', 'Password must be at least 6 characters.');
+			redirect('changePassword');
+			return;
+		}
+		if($new_pass !== $confirm_pass){
+			$this->session->set_flashdata('error', 'Passwords do not match.');
+			redirect('changePassword');
+			return;
+		}
+
+		$this->db->where('user_id', $user_id)->update('users', [
+			'password'              => sha1($new_pass),
+			'force_password_change' => 0,
+		]);
+		$this->session->unset_userdata('fms_force_change');
+
+		// Notify by email
+		$user = $this->fmsm_enhanced->get_user_by_id($user_id);
+		if($user && !empty($user['email'])){
+			$name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+			$this->fms_mailer->password_changed($user['email'], $name);
+		}
+
+		$this->session->set_flashdata('success', 'Password set successfully. Welcome to GREATER FMS!');
+		redirect('/');
+	}
+
+	// ============================================================
+	// EMAIL NOTIFICATION TESTER  (Super Admin only)
+	// ============================================================
+
+	public function emailTester(){
+		if(!$this->auth_manager->is_super_admin()){
+			show_error('Access Denied', 403);
+		}
+		$this->data['title']       = 'FMS – Email Notification Tester';
+		$this->data['all_partners'] = $this->fmsm_enhanced->get_all_partners();
+		$this->load->view('pages/email_tester', $this->data);
+	}
+
+	public function sendTestEmail(){
+		header('Content-Type: application/json');
+		if(!$this->auth_manager->is_super_admin()){
+			echo json_encode(['success'=>false,'message'=>'Access denied.']); return;
+		}
+
+		$to    = trim($this->input->post('email'));
+		$type  = $this->input->post('type');
+
+		if(!filter_var($to, FILTER_VALIDATE_EMAIL)){
+			echo json_encode(['success'=>false,'message'=>'Invalid email address.']); return;
+		}
+
+		// Mock data for each email type
+		$mock_ts = [
+			'timesheet_id'=>1,'month'=>5,'year'=>2026,
+			'total_hours'=>160,'staff_category'=>'Academic Staff',
+			'status'=>'submitted','submitted_at'=>date('Y-m-d H:i:s'),
+		];
+		$mock_expense = [
+			'expense_id'=>1,'FileName'=>'Q1_2026_Invoice.pdf',
+			'Amount'=>1250.00,'Currency'=>'EUR','Category'=>'Travel',
+			'WorkPackage'=>'WP3','Date'=>date('Y-m-d'),
+		];
+		$mock_report = [
+			'report_id'=>1,'month'=>5,'year'=>2026,
+			'partner_name'=>'HBRS University','status'=>'submitted',
+		];
+
+		$ok = false;
+		switch($type){
+			case 'account_created':
+				$ok = $this->fms_mailer->account_created($to, 'John Doe', 'Temp@1234', 'Member'); break;
+			case 'timesheet_submitted':
+				$ok = $this->fms_mailer->timesheet_submitted($mock_ts, 'Jane Smith', [$to]); break;
+			case 'timesheet_approved':
+				$ok = $this->fms_mailer->timesheet_approved($mock_ts, $to, 'Jane Smith'); break;
+			case 'timesheet_rejected':
+				$ok = $this->fms_mailer->timesheet_rejected($mock_ts, $to, 'Jane Smith', 'Missing daily breakdown for week 3.'); break;
+			case 'expense_approved':
+				$ok = $this->fms_mailer->expense_approved($mock_expense, $to, 'Alice Coordinator'); break;
+			case 'expense_rejected':
+				$ok = $this->fms_mailer->expense_rejected($mock_expense, $to, 'Alice Coordinator', 'Receipt missing for item #3.'); break;
+			case 'monthly_report_submitted':
+				$ok = $this->fms_mailer->monthly_report_submitted($mock_report, 'Alice Coordinator', [$to]); break;
+			case 'monthly_report_approved':
+				$ok = $this->fms_mailer->monthly_report_approved($mock_report, $to, 'Alice Coordinator'); break;
+			case 'monthly_report_rejected':
+				$ok = $this->fms_mailer->monthly_report_rejected($mock_report, $to, 'Alice Coordinator', 'Totals do not match attached invoices.'); break;
+			case 'password_reset':
+				$ok = $this->fms_mailer->password_reset($to, 'John Doe', 'Temp@9876'); break;
+			case 'password_changed':
+				$ok = $this->fms_mailer->password_changed($to, 'John Doe'); break;
+			default:
+				echo json_encode(['success'=>false,'message'=>'Unknown email type.']); return;
+		}
+
+		if($ok){
+			echo json_encode(['success'=>true,'message'=>'Test email sent to <strong>' . htmlspecialchars($to) . '</strong>. Please check your inbox.']);
+		} else {
+			echo json_encode(['success'=>false,'message'=>'Failed to send. Check SMTP settings or server logs.']);
+		}
+	}
+
+	// ==================== END EMAIL TESTER ====================
 
 	public function logout(){
 		$this->session->sess_destroy();

@@ -164,11 +164,19 @@ class Auth_manager {
     }
 
     /**
-     * Require login - redirect if not logged in
+     * Require login - redirect if not logged in.
+     * Also intercepts accounts that must change their password on first login.
      */
     public function require_login(){
         if(!$this->is_logged_in()){
             redirect('login');
+        }
+        // Force password change — skip for the change-password route itself and logout
+        if($this->CI->session->userdata('fms_force_change')){
+            $method = $this->CI->router->fetch_method();
+            if(!in_array($method, ['changePassword', 'processChangePassword', 'logout'])){
+                redirect('changePassword');
+            }
         }
     }
 
@@ -211,6 +219,7 @@ class Auth_manager {
             'fms_role_name' => $user_data['role_name'],
             'fms_staff_id' => $user_data['staff_id'],
             'fms_level' => $user_data['level'],
+            'fms_force_change' => !empty($user_data['force_password_change']) ? TRUE : FALSE,
             'logged_in' => TRUE
         );
 

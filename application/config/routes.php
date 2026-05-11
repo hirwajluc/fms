@@ -133,8 +133,16 @@ $route['downloadForexTemplate']      = 'fms/downloadForexTemplate';
 $route['logout'] = 'fms/logout';
 
 // Forgot password
-$route['forgotPassword']      = 'login/forgotPassword';
+$route['forgotPassword']        = 'login/forgotPassword';
 $route['processForgotPassword'] = 'login/processForgotPassword';
+
+// Forced password change
+$route['changePassword']        = 'fms/changePassword';
+$route['processChangePassword'] = 'fms/processChangePassword';
+
+// Email notification tester (super admin)
+$route['emailTester']    = 'fms/emailTester';
+$route['sendTestEmail']  = 'fms/sendTestEmail';
 
 $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;

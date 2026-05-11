@@ -105,9 +105,17 @@ class Fms_model_enhanced extends CI_Model{
             ->get('users')->row_array();
     }
 
-    public function update_user_password($user_id, $hashed_password){
+    public function update_user_password($user_id, $hashed_password, $force_change = FALSE){
         return $this->db->where('user_id', $user_id)
-                        ->update('users', ['password' => $hashed_password]);
+                        ->update('users', [
+                            'password'              => $hashed_password,
+                            'force_password_change' => $force_change ? 1 : 0,
+                        ]);
+    }
+
+    public function clear_force_password_change($user_id){
+        return $this->db->where('user_id', $user_id)
+                        ->update('users', ['force_password_change' => 0]);
     }
 
     /** Return emails of all super admins and admins */

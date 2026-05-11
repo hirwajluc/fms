@@ -111,6 +111,12 @@
                           <div data-i18n="ForexExchange">Forex Exchange</div>
                         </a>
                       </li>
+                      <li class="menu-item <?=($this->router->fetch_method()=='emailTester')?'active':'';?>">
+                        <a href="<?=base_url('emailTester');?>" class="menu-link">
+                          <i class="menu-icon tf-icons ti ti-mail-check"></i>
+                          <div data-i18n="EmailTester">Email Tester</div>
+                        </a>
+                      </li>
                       <?php endif; ?>
                     </ul>
                   </li>

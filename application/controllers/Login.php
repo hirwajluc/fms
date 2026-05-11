@@ -108,8 +108,8 @@ class Login extends CI_Controller {
 			$new_password .= $chars[random_int(0, strlen($chars) - 1)];
 		}
 
-		// Save hashed password
-		$this->fmsm_enhanced->update_user_password($user['user_id'], sha1($new_password));
+		// Save hashed password — force password change on next login
+		$this->fmsm_enhanced->update_user_password($user['user_id'], sha1($new_password), TRUE);
 
 		// Send email
 		$full_name = ($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '');

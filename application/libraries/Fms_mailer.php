@@ -24,11 +24,10 @@ class Fms_mailer {
     // PUBLIC NOTIFICATION METHODS
     // ─────────────────────────────────────────────────────────────────
 
-    /** New account welcome email with login credentials */
+    /** New account welcome email — temporary password, must change on first login */
     public function account_created($to_email, $full_name, $plain_password, $role_name = 'Member'){
-        $subject = 'Welcome to GREATER FMS – Your Account is Ready';
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $app_url  = $protocol . '://' . ($_SERVER['HTTP_HOST'] ?? 'greaterproject.eu') . '/fms/';
+        $subject  = 'Welcome to GREATER FMS – Your Account is Ready';
+        $app_url  = $this->_app_url();
 
         $body = $this->_wrap(
             'Welcome to GREATER FMS!',
@@ -36,16 +35,34 @@ class Fms_mailer {
             '✓ Account Created',
             "Hello <strong>" . htmlspecialchars($full_name) . "</strong>,<br><br>
              Your account has been created on the <strong>GREATER Financial Management System</strong>.
-             Below are your login credentials:",
+             Use the temporary password below to log in — you will be asked to set a new password immediately.",
             $this->_info_table([
-                'Full Name'  => htmlspecialchars($full_name),
-                'Email'      => htmlspecialchars($to_email),
-                'Password'   => '<span style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:1px;">' . htmlspecialchars($plain_password) . '</span>',
-                'Role'       => htmlspecialchars($role_name),
+                'Full Name'         => htmlspecialchars($full_name),
+                'Email'             => htmlspecialchars($to_email),
+                'Temporary Password'=> '<span style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:2px;background:#f5f5ff;padding:3px 10px;border-radius:4px;">' . htmlspecialchars($plain_password) . '</span>',
+                'Role'              => htmlspecialchars($role_name),
             ]) .
-            "<p style='color:#e53935;font-size:12px;margin-top:10px;'>⚠ Please change your password after your first login.</p>",
-            'Login to FMS',
+            $this->_alert_box('⚠ This is a temporary password. You must change it on your first login. Do not share it with anyone.', '#FF9800'),
+            'Login &amp; Set Your Password',
             $app_url . 'login'
+        );
+
+        return $this->_send($to_email, $full_name, $subject, $body);
+    }
+
+    /** Password changed voluntarily from profile */
+    public function password_changed($to_email, $full_name){
+        $subject = 'Your GREATER FMS Password Was Changed';
+
+        $body = $this->_wrap(
+            'Password Changed',
+            '#696cff',
+            '🔒 Security Notice',
+            "Hello <strong>" . htmlspecialchars($full_name) . "</strong>,<br><br>
+             Your GREATER FMS password was successfully changed on <strong>" . date('d M Y') . " at " . date('H:i') . "</strong>.",
+            $this->_alert_box('If you did not make this change, please contact your system administrator immediately and reset your password.', '#e53935'),
+            'Go to FMS',
+            $this->_app_url() . 'login'
         );
 
         return $this->_send($to_email, $full_name, $subject, $body);
@@ -293,14 +310,14 @@ class Fms_mailer {
             '#FF9800',
             '🔑 Password Reset',
             "Hello <strong>" . htmlspecialchars($full_name) . "</strong>,<br><br>
-             Your password has been reset. Use the temporary password below to log in,
-             then change it immediately from your profile settings.",
+             Your password has been reset. Use the temporary password below to log in —
+             you will be asked to set a new password immediately.",
             $this->_info_table([
                 'Email'             => htmlspecialchars($to_email),
-                'Temporary Password'=> '<span style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:1px;">' . htmlspecialchars($new_password) . '</span>',
+                'Temporary Password'=> '<span style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:2px;background:#fff8f0;padding:3px 10px;border-radius:4px;">' . htmlspecialchars($new_password) . '</span>',
             ]) .
-            "<p style='color:#e53935;font-size:12px;margin-top:10px;'>⚠ If you did not request a password reset, please contact your administrator immediately.</p>",
-            'Login Now',
+            $this->_alert_box('⚠ If you did not request this reset, please contact your administrator immediately.', '#e53935'),
+            'Login &amp; Set New Password',
             $this->_app_url() . 'login'
         );
 
@@ -339,6 +356,13 @@ class Fms_mailer {
         $names = [1=>'January',2=>'February',3=>'March',4=>'April',5=>'May',6=>'June',
                   7=>'July',8=>'August',9=>'September',10=>'October',11=>'November',12=>'December'];
         return $names[(int)$month] ?? $month;
+    }
+
+    private function _alert_box($message, $color = '#FF9800'){
+        return '<div style="background:' . $color . '18;border-left:4px solid ' . $color . ';
+                            border-radius:4px;padding:12px 16px;margin:16px 0;
+                            font-size:12.5px;color:#333;line-height:1.6;">'
+               . $message . '</div>';
     }
 
     private function _info_table($rows){
