@@ -2287,8 +2287,31 @@ class Fms extends CI_Controller {
 		);
 
 		// Create staff member
-		if($this->fmsm_enhanced->create_staff($staff_data)){
-			$this->session->set_flashdata('success', 'Staff member created successfully.');
+		$staff_id = $this->fmsm_enhanced->create_staff($staff_data);
+		if($staff_id){
+			// Generate temporary password and create login account
+			$chars    = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
+			$tmp_pass = '';
+			for($i = 0; $i < 10; $i++) $tmp_pass .= $chars[random_int(0, strlen($chars) - 1)];
+
+			$email = $this->input->post('email');
+			$user_data = array(
+				'staff_id'              => $staff_id,
+				'email'                 => $email,
+				'password'              => sha1($tmp_pass),
+				'role_id'               => 4, // Member
+				'status'                => 'active',
+				'force_password_change' => 1,
+			);
+
+			if($this->fmsm_enhanced->create_user($user_data)){
+				$full_name = trim($this->input->post('first_name') . ' ' . $this->input->post('last_name'));
+				$this->fms_mailer->account_created($email, $full_name, $tmp_pass, 'Member');
+				$this->session->set_flashdata('success', 'Staff member created successfully. A welcome email with login credentials has been sent to ' . htmlspecialchars($email) . '.');
+			} else {
+				// Staff record created but user account failed — still show partial success
+				$this->session->set_flashdata('success', 'Staff member record created. However, the login account could not be created automatically — please use "New User Account" to add login access manually.');
+			}
 			redirect('users');
 		} else {
 			$this->session->set_flashdata('error', 'Failed to create staff member. Please try again.');
