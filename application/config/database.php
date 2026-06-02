@@ -75,9 +75,9 @@ $query_builder = TRUE;
 
 $db['default'] = array(
 	'dsn'	=> '',
-	'hostname' => 'localhost',
-	'username' => 'root',
-	'password' => '',
+	'hostname' => '31.11.39.158',
+	'username' => 'Sql1800295',
+	'password' => 'GreaterPass123!',
 	'database' => 'Sql1800295_2',
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
@@ -92,6 +92,5 @@ $db['default'] = array(
 	'compress' => FALSE,
 	'stricton' => FALSE,
 	'failover' => array(),
-	'port' => 3306,
 	'save_queries' => TRUE
 );

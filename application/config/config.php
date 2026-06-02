@@ -23,10 +23,13 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | a PHP script and you can easily do that on your own.
 |
 */
+
 // Auto-detect base URL so the same config works on dev and production
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host     = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '86.48.7.218';
+$host     = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'greaterproject.eu';
 $config['base_url'] = $protocol . '://' . $host . '/fms/';
+
+//$config['base_url'] = 'https://greaterproject.eu/fms/';
 
 /*
 |--------------------------------------------------------------------------
