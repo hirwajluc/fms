@@ -33,3 +33,7 @@ assets/otherfiles/*
 # Environment files
 .env
 .env.local
+
+# Environment-specific config (already tracked; local changes ignored via skip-worktree)
+application/config/config.php
+application/config/database.php
