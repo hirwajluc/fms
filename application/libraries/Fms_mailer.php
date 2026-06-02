@@ -329,6 +329,9 @@ class Fms_mailer {
     // ─────────────────────────────────────────────────────────────────
 
     private function _send($to_email, $to_name, $subject, $body){
+        // Buffer any stray PHP output (warnings from fsockopen etc.) so they
+        // never corrupt a JSON response in the caller.
+        ob_start();
         try {
             $this->CI->email->initialize($this->CI->config->item('email'));
             $this->CI->email->clear();
@@ -336,16 +339,24 @@ class Fms_mailer {
             $this->CI->email->to($to_email);
             $this->CI->email->subject($subject);
             $this->CI->email->message($body);
-            $result = $this->CI->email->send(FALSE);
+            $result = @$this->CI->email->send(FALSE);
+            ob_end_clean();
             if(!$result){
-                log_message('error', 'FMS_Mailer failed to ' . $to_email . ': ' . $this->CI->email->print_debugger(['headers']));
+                $debug = $this->CI->email->print_debugger(['smtp_log']);
+                log_message('error', 'FMS_Mailer: send to ' . $to_email . ' failed. SMTP log: ' . $debug);
+                $this->_last_error = $debug;
             }
             return $result;
         } catch(Exception $e){
+            ob_end_clean();
             log_message('error', 'FMS_Mailer exception: ' . $e->getMessage());
+            $this->_last_error = $e->getMessage();
             return false;
         }
     }
+
+    /** Last SMTP error/debug output — readable after a failed send. */
+    public $_last_error = '';
 
     private function _app_url(){
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';

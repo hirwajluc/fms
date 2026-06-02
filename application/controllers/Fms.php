@@ -2092,15 +2092,18 @@ class Fms extends CI_Controller {
 			);
 
 			if($this->fmsm_enhanced->create_user($user_data)){
-				// Send welcome email with temporary password
 				$role_names = [1=>'Super Admin',2=>'Admin',3=>'Institution Coordinator',4=>'Member'];
-				$this->fms_mailer->account_created(
+				$mail_sent  = $this->fms_mailer->account_created(
 					$this->input->post('email'),
 					$this->input->post('first_name') . ' ' . $this->input->post('last_name'),
 					$tmp_pass,
 					$role_names[$role_id] ?? 'Member'
 				);
-				$this->session->set_flashdata('success', 'User created successfully. A temporary password has been sent to their email.');
+				if($mail_sent){
+					$this->session->set_flashdata('success', 'User created successfully. A temporary password has been sent to their email.');
+				} else {
+					$this->session->set_flashdata('success', 'User created successfully. Temporary password: <strong>' . htmlspecialchars($tmp_pass) . '</strong> — the welcome email could not be sent, please share it manually.');
+				}
 				redirect('users');
 			} else {
 				$this->session->set_flashdata('error', 'Failed to create user account.');
@@ -2305,9 +2308,13 @@ class Fms extends CI_Controller {
 			);
 
 			if($this->fmsm_enhanced->create_user($user_data)){
-				$full_name = trim($this->input->post('first_name') . ' ' . $this->input->post('last_name'));
-				$this->fms_mailer->account_created($email, $full_name, $tmp_pass, 'Member');
-				$this->session->set_flashdata('success', 'Staff member created successfully. A welcome email with login credentials has been sent to ' . htmlspecialchars($email) . '.');
+				$full_name  = trim($this->input->post('first_name') . ' ' . $this->input->post('last_name'));
+				$mail_sent  = $this->fms_mailer->account_created($email, $full_name, $tmp_pass, 'Member');
+				if($mail_sent){
+					$this->session->set_flashdata('success', 'Staff member created successfully. A welcome email with login credentials has been sent to ' . htmlspecialchars($email) . '.');
+				} else {
+					$this->session->set_flashdata('success', 'Staff member and login account created (temporary password: <strong>' . htmlspecialchars($tmp_pass) . '</strong>). However, the welcome email could not be sent — please share the password with <strong>' . htmlspecialchars($email) . '</strong> manually.');
+				}
 			} else {
 				// Staff record created but user account failed — still show partial success
 				$this->session->set_flashdata('success', 'Staff member record created. However, the login account could not be created automatically — please use "New User Account" to add login access manually.');
@@ -3612,8 +3619,11 @@ class Fms extends CI_Controller {
 	}
 
 	public function sendTestEmail(){
+		// Buffer everything so no stray output can break the JSON response
+		ob_start();
 		header('Content-Type: application/json');
 		if(!$this->auth_manager->is_super_admin()){
+			ob_end_clean();
 			echo json_encode(['success'=>false,'message'=>'Access denied.']); return;
 		}
 
@@ -3668,10 +3678,13 @@ class Fms extends CI_Controller {
 				echo json_encode(['success'=>false,'message'=>'Unknown email type.']); return;
 		}
 
+		ob_end_clean();
 		if($ok){
 			echo json_encode(['success'=>true,'message'=>'Test email sent to <strong>' . htmlspecialchars($to) . '</strong>. Please check your inbox.']);
 		} else {
-			echo json_encode(['success'=>false,'message'=>'Failed to send. Check SMTP settings or server logs.']);
+			$debug = htmlspecialchars(strip_tags($this->fms_mailer->_last_error));
+			$detail = $debug ? '<br><pre style="font-size:11px;margin-top:6px;white-space:pre-wrap;">' . $debug . '</pre>' : '';
+			echo json_encode(['success'=>false,'message'=>'Failed to send — SMTP error.' . $detail]);
 		}
 	}
 
