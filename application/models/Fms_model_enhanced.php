@@ -844,8 +844,17 @@ class Fms_model_enhanced extends CI_Model{
      * Get monthly report with all details
      */
     public function get_monthly_report($report_id){
-        $report = $this->db->where('report_id', $report_id)->get('monthly_financial_reports')->row_array();
+        $report = $this->db
+            ->select('monthly_financial_reports.*, partners.name AS partner_name')
+            ->join('partners', 'partners.partner_id = monthly_financial_reports.partner_id', 'left')
+            ->where('report_id', $report_id)
+            ->get('monthly_financial_reports')
+            ->row_array();
         if(!$report) return FALSE;
+
+        // Normalise field names so mailer and views can use month/year
+        $report['month'] = $report['report_month'];
+        $report['year']  = $report['report_year'];
 
         // Get expenses in report
         $report['expenses'] = $this->db->where('report_id', $report_id)->get('monthly_report_items')->result_array();
