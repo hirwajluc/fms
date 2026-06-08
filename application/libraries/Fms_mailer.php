@@ -301,6 +301,64 @@ class Fms_mailer {
         return $this->_send($coordinator_email, $coordinator_name, $subject, $body);
     }
 
+    /**
+     * WP file uploaded — notify uploader (confirmation) and super admins.
+     *
+     * @param string $uploader_email
+     * @param string $uploader_name
+     * @param array  $file     keys: display_name, wp_name, wp_code, partner_name, version_number, original_filename
+     * @param array  $sa_emails  list of super admin email addresses
+     */
+    public function file_uploaded($uploader_email, $uploader_name, $file, $sa_emails = []){
+        $wp_label = htmlspecialchars(($file['wp_code'] ?? '') . ' – ' . ($file['wp_name'] ?? ''));
+        $is_new   = ($file['version_number'] == 1);
+        $action   = $is_new ? 'New File Uploaded' : 'New Version Uploaded (v' . $file['version_number'] . ')';
+        $colour   = $is_new ? '#4CAF50' : '#696cff';
+
+        $info = $this->_info_table([
+            'File Name'      => htmlspecialchars($file['display_name']),
+            'Original File'  => htmlspecialchars($file['original_filename'] ?? $file['display_name']),
+            'Work Package'   => $wp_label,
+            'Partner'        => htmlspecialchars($file['partner_name'] ?? '—'),
+            'Version'        => 'v' . $file['version_number'],
+            'Uploaded On'    => date('d M Y, H:i'),
+            'Uploaded By'    => htmlspecialchars($uploader_name),
+        ]);
+
+        // ── Confirmation to the uploader ──────────────────────────────
+        $uploader_body = $this->_wrap(
+            'File Uploaded Successfully',
+            $colour,
+            '✓ ' . $action,
+            "Hello <strong>" . htmlspecialchars($uploader_name) . "</strong>,<br><br>
+             Your file has been <strong>uploaded successfully</strong> to the GREATER FMS document repository.",
+            $info,
+            'View Work Package',
+            $this->_app_url() . 'otherFiles'
+        );
+        $this->_send($uploader_email, $uploader_name, 'File Uploaded – ' . htmlspecialchars($file['display_name']), $uploader_body);
+
+        // ── Notification to each super admin ──────────────────────────
+        if(!empty($sa_emails)){
+            $admin_body = $this->_wrap(
+                'New WP File Uploaded',
+                $colour,
+                '📂 ' . $action,
+                "A file has been uploaded to the GREATER FMS document repository.",
+                $info,
+                'View Work Package',
+                $this->_app_url() . 'otherFiles'
+            );
+            foreach((array)$sa_emails as $email){
+                if(filter_var($email, FILTER_VALIDATE_EMAIL)){
+                    $this->_send($email, '', 'New WP File – ' . htmlspecialchars($file['display_name']), $admin_body);
+                }
+            }
+        }
+
+        return true;
+    }
+
     /** Password reset — send new temporary password */
     public function password_reset($to_email, $full_name, $new_password){
         $subject = 'Your GREATER FMS Password Has Been Reset';

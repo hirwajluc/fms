@@ -127,6 +127,14 @@ class Fms_model_enhanced extends CI_Model{
         return array_column($rows, 'email');
     }
 
+    public function get_super_admin_emails(){
+        $rows = $this->db->select('users.email')
+                         ->where('users.role_id', 1)
+                         ->where('users.status', 'active')
+                         ->get('users')->result_array();
+        return array_column($rows, 'email');
+    }
+
     /** Return emails of coordinators for a given partner */
     public function get_coordinator_emails($partner_id){
         $rows = $this->db->select('users.email')
