@@ -3131,10 +3131,14 @@ class Fms extends CI_Controller {
 				'description'  => $description,
 				'uploaded_by'  => $user_id,
 			]);
+			if(!$file_id){
+				echo json_encode(['success' => false, 'message' => 'Failed to create file record in database.']);
+				return;
+			}
 		}
 
 		// Create version record
-		$this->fmsm_enhanced->create_file_version([
+		$version_id = $this->fmsm_enhanced->create_file_version([
 			'file_id'        => $file_id,
 			'version_number' => $version_num,
 			'stored_name'    => $stored_name,
@@ -3144,25 +3148,29 @@ class Fms extends CI_Controller {
 			'description'    => $description,
 			'uploaded_by'    => $user_id,
 		]);
+		if(!$version_id){
+			echo json_encode(['success' => false, 'message' => 'Failed to save file version in database.']);
+			return;
+		}
 
-		// Send email notifications
-		$uploader      = $this->fmsm_enhanced->get_user_by_id($user_id);
-		$uploader_name = $uploader ? trim(($uploader['first_name'] ?? '') . ' ' . ($uploader['last_name'] ?? '')) : 'User';
+		// ── Both DB writes confirmed successful — now send notifications ──
+		$uploader       = $this->fmsm_enhanced->get_user_by_id($user_id);
+		$uploader_name  = $uploader ? trim(($uploader['first_name'] ?? '') . ' ' . ($uploader['last_name'] ?? '')) : 'User';
 		$uploader_email = $uploader['email'] ?? '';
-		$wp_info       = $this->fmsm_enhanced->get_work_package_by_id($wp_id);
-		$partner_name  = $uploader['partner_name'] ?? '';
+		$wp_info        = $this->fmsm_enhanced->get_work_package_by_id($wp_id);
+		$partner_name   = $uploader['partner_name'] ?? '';
 		if($this->auth_manager->is_super_admin()) $partner_name = 'GREATER (Super Admin)';
 
 		if($uploader_email){
 			$sa_emails = $this->auth_manager->is_super_admin()
-				? []   // super admin uploading — no need to notify themselves again
+				? []
 				: $this->fmsm_enhanced->get_super_admin_emails();
 
 			$this->fms_mailer->file_uploaded($uploader_email, $uploader_name, [
 				'display_name'      => $display_name ?: pathinfo($file_orig, PATHINFO_FILENAME),
 				'original_filename' => $file_orig,
-				'wp_code'           => $wp_info['code']   ?? ('WP' . $wp_id),
-				'wp_name'           => $wp_info['name']   ?? '',
+				'wp_code'           => $wp_info['code'] ?? ('WP' . $wp_id),
+				'wp_name'           => $wp_info['name'] ?? '',
 				'partner_name'      => $partner_name,
 				'version_number'    => $version_num,
 			], $sa_emails);
