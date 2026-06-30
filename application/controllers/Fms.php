@@ -3153,7 +3153,28 @@ class Fms extends CI_Controller {
 			return;
 		}
 
-		// ── Both DB writes confirmed successful — now send notifications ──
+		// ── Both DB writes confirmed — return success to browser immediately ──
+		$json_response = json_encode([
+			'success'      => true,
+			'message'      => 'File uploaded successfully as version v' . $version_num . '.',
+			'stored_name'  => $stored_name,
+			'version'      => $version_num,
+			'file_id'      => $file_id,
+		]);
+
+		header('Content-Type: application/json');
+		header('Content-Length: ' . strlen($json_response));
+		echo $json_response;
+
+		// Flush response to the browser before doing anything else
+		if(function_exists('fastcgi_finish_request')){
+			fastcgi_finish_request();
+		} else {
+			while(ob_get_level()) ob_end_flush();
+			flush();
+		}
+
+		// ── Send notifications AFTER browser has received the response ──
 		$uploader       = $this->fmsm_enhanced->get_user_by_id($user_id);
 		$uploader_name  = $uploader ? trim(($uploader['first_name'] ?? '') . ' ' . ($uploader['last_name'] ?? '')) : 'User';
 		$uploader_email = $uploader['email'] ?? '';
@@ -3175,14 +3196,6 @@ class Fms extends CI_Controller {
 				'version_number'    => $version_num,
 			], $sa_emails);
 		}
-
-		echo json_encode([
-			'success'      => true,
-			'message'      => 'File uploaded successfully as version v' . $version_num . '.',
-			'stored_name'  => $stored_name,
-			'version'      => $version_num,
-			'file_id'      => $file_id,
-		]);
 	}
 
 	/**
