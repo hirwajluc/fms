@@ -241,10 +241,12 @@
               </div>
 
               <div id="uploadProgress" class="d-none mb-2">
-                <div class="progress" style="height:6px;">
-                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary w-100"></div>
+                <div class="progress" style="height:22px; border-radius:4px;">
+                  <div id="uploadProgressBar" class="progress-bar progress-bar-striped bg-primary"
+                       role="progressbar" style="width:0%; transition:width .2s ease;"
+                       aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
                 </div>
-                <small class="text-muted">Uploading…</small>
+                <small id="uploadProgressLabel" class="text-muted">Uploading…</small>
               </div>
               <div id="uploadResult"></div>
             </form>
@@ -293,10 +295,12 @@
               </div>
 
               <div id="versionProgress" class="d-none mb-2">
-                <div class="progress" style="height:6px;">
-                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning w-100"></div>
+                <div class="progress" style="height:22px; border-radius:4px;">
+                  <div id="versionProgressBar" class="progress-bar progress-bar-striped bg-warning"
+                       role="progressbar" style="width:0%; transition:width .2s ease;"
+                       aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
                 </div>
-                <small class="text-muted">Uploading…</small>
+                <small id="versionProgressLabel" class="text-muted">Uploading…</small>
               </div>
               <div id="versionResult"></div>
             </form>
@@ -477,6 +481,8 @@
         var form = document.getElementById('uploadForm');
         if(!form.checkValidity()){ form.reportValidity(); return; }
         var fd = new FormData(form);
+        $('#uploadProgressBar').css('width','0%').attr('aria-valuenow',0).text('0%').removeClass('progress-bar-animated');
+        $('#uploadProgressLabel').text('Uploading…');
         $('#uploadProgress').removeClass('d-none');
         $('#uploadResult').html('');
         $('#btnUpload').prop('disabled', true);
@@ -484,12 +490,26 @@
         $.ajax({
           url: '<?=base_url('uploadOtherFile');?>',
           type: 'POST', data: fd, processData: false, contentType: false, dataType: 'json',
+          xhr: function(){
+            var xhr = new window.XMLHttpRequest();
+            xhr.upload.addEventListener('progress', function(e){
+              if(e.lengthComputable){
+                var pct = Math.round(e.loaded / e.total * 100);
+                $('#uploadProgressBar').css('width', pct + '%').attr('aria-valuenow', pct).text(pct + '%');
+                if(pct === 100){
+                  $('#uploadProgressBar').addClass('progress-bar-animated');
+                  $('#uploadProgressLabel').text('Processing…');
+                }
+              }
+            }, false);
+            return xhr;
+          },
           success: function(res){
             $('#uploadProgress').addClass('d-none');
             $('#btnUpload').prop('disabled', false);
             if(res.success){
               showResult($('#uploadResult'), 'success', '<i class="ti ti-check me-1"></i>' + res.message);
-              setTimeout(function(){ location.reload(); }, 1200);
+              setTimeout(function(){ location.reload(); }, 1500);
             } else {
               showResult($('#uploadResult'), 'danger', '<i class="ti ti-alert-circle me-1"></i>' + res.message);
             }
@@ -529,6 +549,8 @@
         if(!form.checkValidity()){ form.reportValidity(); return; }
         var fd = new FormData(form);
         fd.set('file_id', $('#versionFileId').val());
+        $('#versionProgressBar').css('width','0%').attr('aria-valuenow',0).text('0%').removeClass('progress-bar-animated');
+        $('#versionProgressLabel').text('Uploading…');
         $('#versionProgress').removeClass('d-none');
         $('#versionResult').html('');
         $('#btnAddVersion').prop('disabled', true);
@@ -536,12 +558,26 @@
         $.ajax({
           url: '<?=base_url('uploadOtherFile');?>',
           type: 'POST', data: fd, processData: false, contentType: false, dataType: 'json',
+          xhr: function(){
+            var xhr = new window.XMLHttpRequest();
+            xhr.upload.addEventListener('progress', function(e){
+              if(e.lengthComputable){
+                var pct = Math.round(e.loaded / e.total * 100);
+                $('#versionProgressBar').css('width', pct + '%').attr('aria-valuenow', pct).text(pct + '%');
+                if(pct === 100){
+                  $('#versionProgressBar').addClass('progress-bar-animated');
+                  $('#versionProgressLabel').text('Processing…');
+                }
+              }
+            }, false);
+            return xhr;
+          },
           success: function(res){
             $('#versionProgress').addClass('d-none');
             $('#btnAddVersion').prop('disabled', false);
             if(res.success){
               showResult($('#versionResult'), 'success', '<i class="ti ti-check me-1"></i>' + res.message);
-              setTimeout(function(){ location.reload(); }, 1200);
+              setTimeout(function(){ location.reload(); }, 1500);
             } else {
               showResult($('#versionResult'), 'danger', '<i class="ti ti-alert-circle me-1"></i>' + res.message);
             }
