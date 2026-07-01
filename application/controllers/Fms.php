@@ -104,14 +104,19 @@ class Fms extends CI_Controller {
 	public function newTimesheet(){
 		$this->data["title"] = "FMS - New Timesheet";
 
-		// Get current user's partner information
 		$user_id = $this->session->userdata('fms_user_id');
-		$user = $this->fmsm_enhanced->get_user_by_id($user_id);
+		$user    = $this->fmsm_enhanced->get_user_by_id($user_id);
 
 		if($user){
-			$this->data['user'] = $user;
-			$this->data['partner_id'] = $user['partner_id'];
+			$this->data['user']         = $user;
+			$this->data['partner_id']   = $user['partner_id'];
 			$this->data['partner_name'] = $user['partner_name'];
+		}
+
+		// Coordinators can create timesheets on behalf of their staff
+		if($this->auth_manager->is_coordinator()){
+			$partner_id = $this->session->userdata('fms_partner_id');
+			$this->data['staff_users'] = $this->fmsm_enhanced->get_all_users($partner_id);
 		}
 
 		$this->load->view('pages/newtimesheet', $this->data);
@@ -399,7 +404,21 @@ class Fms extends CI_Controller {
 		}
 
 		$user_id = $this->session->userdata('fms_user_id');
-		$user = $this->fmsm_enhanced->get_user_by_id($user_id);
+		$user    = $this->fmsm_enhanced->get_user_by_id($user_id);
+
+		// Coordinator creating on behalf of a staff member
+		$for_user_id = (int)$this->input->post('for_user_id');
+		if($for_user_id && $for_user_id !== $user_id && $this->auth_manager->is_coordinator()){
+			$target = $this->fmsm_enhanced->get_user_by_id($for_user_id);
+			if($target && $target['partner_id'] == $user['partner_id']){
+				$user_id = $for_user_id;
+				$user    = $target;
+			} else {
+				$this->session->set_flashdata('error', 'You can only create timesheets for staff within your own organisation.');
+				redirect('newTimesheet');
+				return;
+			}
+		}
 
 		// Check if timesheet already exists for this user/month/year
 		$existing = $this->fmsm_enhanced->get_timesheet_by_month($user_id, $this->input->post('year'), $this->input->post('month'));

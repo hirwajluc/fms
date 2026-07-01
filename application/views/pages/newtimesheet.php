@@ -101,14 +101,39 @@
                           <hr class="mt-0" />
                         </div>
 
+                        <?php if(!empty($staff_users)): ?>
+                        <!-- Coordinator: pick which staff member this timesheet is for -->
+                        <div class="col-12">
+                          <label class="form-label fw-semibold" for="for_user_id">
+                            <i class="ti ti-user-check me-1 text-primary"></i>Creating timesheet for
+                          </label>
+                          <select id="for_user_id" name="for_user_id" class="form-select select2" required>
+                            <?php foreach($staff_users as $su):
+                              $self = ($su['user_id'] == $user['user_id']);
+                            ?>
+                            <option value="<?=$su['user_id'];?>"
+                                    data-name="<?=htmlspecialchars($su['first_name'].' '.$su['last_name']);?>"
+                                    <?=$self ? 'selected' : '';?>>
+                              <?=htmlspecialchars($su['first_name'].' '.$su['last_name']);?>
+                              <?=$self ? '(myself)' : '';?>
+                            </option>
+                            <?php endforeach; ?>
+                          </select>
+                          <div class="form-text">Select the staff member you are submitting this timesheet on behalf of.</div>
+                        </div>
+                        <?php else: ?>
+                        <input type="hidden" name="for_user_id" value="0" />
+                        <?php endif; ?>
+
                         <div class="col-md-6">
                           <label class="form-label">Name</label>
-                          <input type="text" class="form-control" value="<?=isset($user) ? $user['first_name'].' '.$user['last_name'] : '';?>" disabled />
+                          <input type="text" id="displayName" class="form-control"
+                                 value="<?=isset($user) ? htmlspecialchars($user['first_name'].' '.$user['last_name']) : '';?>" disabled />
                         </div>
 
                         <div class="col-md-6">
                           <label class="form-label">Organization</label>
-                          <input type="text" class="form-control" value="<?=isset($partner_name) ? $partner_name : '';?>" disabled />
+                          <input type="text" class="form-control" value="<?=isset($partner_name) ? htmlspecialchars($partner_name) : '';?>" disabled />
                         </div>
 
                         <div class="col-md-4">
@@ -321,6 +346,12 @@
 
     $(document).ready(function() {
       $('.select2').select2();
+
+      // When coordinator changes the "Creating for" staff member, update the displayed name
+      $('#for_user_id').on('change', function(){
+        var selected = $(this).find('option:selected');
+        $('#displayName').val(selected.data('name') || selected.text().replace('(myself)', '').trim());
+      });
 
       // Add initial entry for manual mode
       addEntry();
