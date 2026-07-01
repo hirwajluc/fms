@@ -3043,29 +3043,26 @@ class Fms extends CI_Controller {
 	 * - Otherwise creates a new file record + v1.
 	 */
 	public function uploadOtherFile(){
+		ob_start();   // Trap any PHP warnings/notices so they don't corrupt the JSON response
 		header('Content-Type: application/json');
+
 		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
-			echo json_encode(['success' => false, 'message' => 'Access denied.']);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
 		}
 
-		$wp_id       = (int)$this->input->post('wp_id');
-		$file_id     = (int)$this->input->post('file_id');   // 0 → new file
-		$description = $this->input->post('description');
+		$wp_id        = (int)$this->input->post('wp_id');
+		$file_id      = (int)$this->input->post('file_id');   // 0 → new file
+		$description  = $this->input->post('description');
 		$display_name = trim($this->input->post('display_name'));
-		$user_id     = $this->session->userdata('fms_user_id');
-		$partner_id  = $this->session->userdata('fms_partner_id');
+		$user_id      = $this->session->userdata('fms_user_id');
+		$partner_id   = $this->session->userdata('fms_partner_id');
 
-		// Validate WP
 		if(!$this->fmsm_enhanced->get_work_package_by_id($wp_id)){
-			echo json_encode(['success' => false, 'message' => 'Invalid work package.']);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'Invalid work package.']); return;
 		}
 
-		// Validate file was uploaded
 		if(empty($_FILES['upload_file']['name'])){
-			echo json_encode(['success' => false, 'message' => 'No file selected.']);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'No file selected.']); return;
 		}
 
 		$allowed_ext = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','zip','rar','png','jpg','jpeg'];
@@ -3076,16 +3073,14 @@ class Fms extends CI_Controller {
 		$ext         = strtolower(pathinfo($file_orig, PATHINFO_EXTENSION));
 
 		if(!in_array($ext, $allowed_ext)){
-			echo json_encode(['success' => false, 'message' => 'File type not allowed. Allowed: ' . implode(', ', $allowed_ext)]);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'File type not allowed. Allowed: ' . implode(', ', $allowed_ext)]); return;
 		}
 		if($file_size > 20 * 1024 * 1024){
-			echo json_encode(['success' => false, 'message' => 'File too large (max 20 MB).']);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'File too large (max 20 MB).']); return;
 		}
 
 		// Get partner short name for filename
-		$partner_info = $this->fmsm_enhanced->get_all_partners();
+		$partner_info  = $this->fmsm_enhanced->get_all_partners();
 		$partner_short = 'UNK';
 		foreach($partner_info as $p){
 			if($p['partner_id'] == $partner_id){
@@ -3093,37 +3088,25 @@ class Fms extends CI_Controller {
 				break;
 			}
 		}
-		// Super admin uploads keep partner from existing file or use SADMIN
 		if($this->auth_manager->is_super_admin() && $file_id > 0){
-			$existing = $this->fmsm_enhanced->get_other_file_by_id($file_id);
+			$existing      = $this->fmsm_enhanced->get_other_file_by_id($file_id);
 			$partner_short = $existing ? strtoupper($existing['partner_short_name'] ?? 'SADMIN') : 'SADMIN';
 			$partner_id    = $existing ? $existing['partner_id'] : $partner_id;
 		} elseif($this->auth_manager->is_super_admin() && $file_id == 0){
 			$partner_short = 'SADMIN';
 		}
 
-		// Determine version number
-		if($file_id > 0){
-			$version_num = $this->fmsm_enhanced->get_next_version_number($file_id);
-		} else {
-			$version_num = 1;
-		}
-
-		// Build stored filename: PARTNER_YYYYMMDD_HHMMSS_vN.ext
+		$version_num = ($file_id > 0) ? $this->fmsm_enhanced->get_next_version_number($file_id) : 1;
 		$datetime    = date('Ymd_His');
 		$stored_name = $partner_short . '_' . $datetime . '_v' . $version_num . '.' . $ext;
 		$dest_path   = FCPATH . 'assets/otherfiles/' . $stored_name;
 
 		if(!move_uploaded_file($file_tmp, $dest_path)){
-			echo json_encode(['success' => false, 'message' => 'Failed to save file. Check server permissions.']);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'Failed to save file. Check server permissions.']); return;
 		}
 
-		// Create file group record if new upload
 		if($file_id == 0){
-			if(empty($display_name)){
-				$display_name = pathinfo($file_orig, PATHINFO_FILENAME);
-			}
+			if(empty($display_name)) $display_name = pathinfo($file_orig, PATHINFO_FILENAME);
 			$file_id = $this->fmsm_enhanced->create_other_file([
 				'wp_id'        => $wp_id,
 				'partner_id'   => $partner_id,
@@ -3132,12 +3115,10 @@ class Fms extends CI_Controller {
 				'uploaded_by'  => $user_id,
 			]);
 			if(!$file_id){
-				echo json_encode(['success' => false, 'message' => 'Failed to create file record in database.']);
-				return;
+				ob_end_clean(); echo json_encode(['success' => false, 'message' => 'Failed to create file record in database.']); return;
 			}
 		}
 
-		// Create version record
 		$version_id = $this->fmsm_enhanced->create_file_version([
 			'file_id'        => $file_id,
 			'version_number' => $version_num,
@@ -3149,33 +3130,11 @@ class Fms extends CI_Controller {
 			'uploaded_by'    => $user_id,
 		]);
 		if(!$version_id){
-			echo json_encode(['success' => false, 'message' => 'Failed to save file version in database.']);
-			return;
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'Failed to save file version in database.']); return;
 		}
 
-		// ── Both DB writes confirmed — return success to browser immediately ──
-		$json_response = json_encode([
-			'success'      => true,
-			'message'      => 'File uploaded successfully as version v' . $version_num . '.',
-			'stored_name'  => $stored_name,
-			'version'      => $version_num,
-			'file_id'      => $file_id,
-		]);
-
-		header('Content-Type: application/json');
-		header('Content-Length: ' . strlen($json_response));
-		echo $json_response;
-
-		// Flush response to the browser before doing anything else
-		if(function_exists('fastcgi_finish_request')){
-			fastcgi_finish_request();
-		} else {
-			while(ob_get_level()) ob_end_flush();
-			flush();
-		}
-
-		// ── Send notifications AFTER browser has received the response ──
-		$uploader       = $this->fmsm_enhanced->get_user_by_id($user_id);
+		// ── Both DB writes confirmed — send notifications, then return success ──
+		$uploader      = $this->fmsm_enhanced->get_user_by_id($user_id);
 		$uploader_name  = $uploader ? trim(($uploader['first_name'] ?? '') . ' ' . ($uploader['last_name'] ?? '')) : 'User';
 		$uploader_email = $uploader['email'] ?? '';
 		$wp_info        = $this->fmsm_enhanced->get_work_package_by_id($wp_id);
@@ -3196,6 +3155,16 @@ class Fms extends CI_Controller {
 				'version_number'    => $version_num,
 			], $sa_emails);
 		}
+
+		// Discard any buffered noise and return clean JSON
+		ob_end_clean();
+		echo json_encode([
+			'success'     => true,
+			'message'     => 'File uploaded successfully as version v' . $version_num . '.',
+			'stored_name' => $stored_name,
+			'version'     => $version_num,
+			'file_id'     => $file_id,
+		]);
 	}
 
 	/**
