@@ -44,6 +44,15 @@
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/datatables-bs5/datatables.bootstrap5.css" />
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/datatables-responsive-bs5/responsive.bootstrap5.css" />
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/flatpickr/flatpickr.css" />
+    <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/sweetalert2/sweetalert2.css" />
+    <style>
+      .swal-fms-popup { border-radius: 14px !important; padding: 2rem 1.5rem 1.5rem !important; width: 26rem !important; font-family: inherit !important; }
+      .swal-fms-popup .swal2-title { font-size: 1.25rem; font-weight: 700; padding-bottom: .25rem; }
+      .swal-fms-popup .swal2-textarea { border-radius: 8px; border: 1px solid #d0d5dd; font-size: .9rem; padding: .6rem .8rem; }
+      .swal-fms-popup .swal2-textarea:focus { border-color: #696cff; box-shadow: 0 0 0 3px rgba(105,108,255,.15); outline: none; }
+      .swal-fms-popup .swal2-validation-message { border-radius: 6px; font-size: .82rem; }
+      .swal-fms-popup .swal2-actions { margin-top: 1.25rem; }
+    </style>
 
     <!-- Page CSS -->
 
@@ -410,6 +419,7 @@
     <!-- Flat Picker -->
     <script src="<?=base_url();?>assets/vendor/libs/moment/moment.js"></script>
     <script src="<?=base_url();?>assets/vendor/libs/flatpickr/flatpickr.js"></script>
+    <script src="<?=base_url();?>assets/vendor/libs/sweetalert2/sweetalert2.js"></script>
 
     <!-- Main JS -->
     <script src="<?=base_url();?>assets/js/main.js"></script>
@@ -496,42 +506,84 @@
     });
     // ────────────────────────────────────────────────────────────────
 
+    function submitTimesheetAction(action, timesheetId, comments) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '<?=base_url();?>' + action + 'Timesheet/' + timesheetId;
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'comments';
+        input.value = comments;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+    }
+
     function approveTimesheet(timesheetId) {
-        var comments = prompt('Add approval comments (optional):');
-        if(comments !== null) {
-            var form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '<?=base_url();?>approveTimesheet/' + timesheetId;
-
-            var commentsInput = document.createElement('input');
-            commentsInput.type = 'hidden';
-            commentsInput.name = 'comments';
-            commentsInput.value = comments;
-
-            form.appendChild(commentsInput);
-            document.body.appendChild(form);
-            form.submit();
-        }
+        Swal.fire({
+            title: 'Approve Timesheet',
+            html:
+                '<p class="text-muted mb-3">You are about to <strong class="text-success">approve</strong> this timesheet.<br>Add any comments below (optional).</p>' +
+                '<textarea id="swal-comments" class="swal2-textarea" placeholder="Approval comments…" style="height:110px; resize:vertical;"></textarea>',
+            icon: 'success',
+            iconColor: '#28a745',
+            showCancelButton: true,
+            confirmButtonText: '<i class="ti ti-check me-1"></i> Approve',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            focusConfirm: false,
+            customClass: {
+                popup:          'swal-fms-popup',
+                confirmButton:  'btn btn-success btn-sm px-4',
+                cancelButton:   'btn btn-secondary btn-sm px-3 ms-2',
+                actions:        'gap-1',
+            },
+            buttonsStyling: false,
+            preConfirm: function() {
+                return document.getElementById('swal-comments').value;
+            }
+        }).then(function(result) {
+            if(result.isConfirmed) {
+                submitTimesheetAction('approve', timesheetId, result.value || '');
+            }
+        });
     }
 
     function rejectTimesheet(timesheetId) {
-        var comments = prompt('Please provide a reason for rejection (required):');
-        if(comments && comments.trim() !== '') {
-            var form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '<?=base_url();?>rejectTimesheet/' + timesheetId;
-
-            var commentsInput = document.createElement('input');
-            commentsInput.type = 'hidden';
-            commentsInput.name = 'comments';
-            commentsInput.value = comments;
-
-            form.appendChild(commentsInput);
-            document.body.appendChild(form);
-            form.submit();
-        } else if(comments !== null) {
-            alert('Comments are required when rejecting a timesheet.');
-        }
+        Swal.fire({
+            title: 'Reject Timesheet',
+            html:
+                '<p class="text-muted mb-3">You are about to <strong class="text-danger">reject</strong> this timesheet.<br>Please provide a reason <span class="text-danger fw-semibold">(required)</span>.</p>' +
+                '<textarea id="swal-comments" class="swal2-textarea" placeholder="Reason for rejection…" style="height:110px; resize:vertical;"></textarea>',
+            icon: 'warning',
+            iconColor: '#dc3545',
+            showCancelButton: true,
+            confirmButtonText: '<i class="ti ti-x me-1"></i> Reject',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            customClass: {
+                popup:          'swal-fms-popup',
+                confirmButton:  'btn btn-danger btn-sm px-4',
+                cancelButton:   'btn btn-secondary btn-sm px-3 ms-2',
+                actions:        'gap-1',
+            },
+            buttonsStyling: false,
+            focusConfirm: false,
+            preConfirm: function() {
+                var val = document.getElementById('swal-comments').value.trim();
+                if(!val) {
+                    Swal.showValidationMessage('A reason is required to reject a timesheet.');
+                    return false;
+                }
+                return val;
+            }
+        }).then(function(result) {
+            if(result.isConfirmed) {
+                submitTimesheetAction('reject', timesheetId, result.value);
+            }
+        });
     }
     </script>
 
