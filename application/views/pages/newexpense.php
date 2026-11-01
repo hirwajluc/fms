@@ -205,9 +205,9 @@
                             name="formAmount"
                             placeholder="Amount (Price)" />
                         </div>
-						<!-- EUR conversion preview (shows when currency=RWF) -->
+						<!-- Conversion preview: RWF shows the EUR equivalent, Euro shows the RWF equivalent -->
 						<div class="col-md-6" id="eurConversionBox" style="display:none;">
-						  <label class="form-label">EUR Equivalent</label>
+						  <label class="form-label" id="conversionLabel">EUR Equivalent</label>
 						  <div class="card border-success bg-light p-3">
 						    <div id="eurConversionResult" class="text-success fw-bold fs-5 mb-1">—</div>
 						    <div id="eurConversionDetail" class="text-muted small"></div>
@@ -332,15 +332,17 @@
         var currency = $('#formCurrency').val();
         var date     = $('#formValidationDate').val(); // flatpickr gives YYYY/MM/DD or YYYY-MM-DD
 
-        if(currency !== 'rwf'){
+        if(currency !== 'rwf' && currency !== 'euro'){
           $('#eurConversionBox').hide();
           return;
         }
+        var target = currency === 'rwf' ? 'EUR' : 'RWF';
+        $('#conversionLabel').text(target + ' Equivalent');
         $('#eurConversionBox').show();
 
         if(!date || isNaN(amount) || amount <= 0){
           $('#eurConversionResult').text('—');
-          $('#eurConversionDetail').text('Enter an amount and date to see the EUR equivalent.');
+          $('#eurConversionDetail').text('Enter an amount and date to see the ' + target + ' equivalent.');
           return;
         }
 
@@ -351,9 +353,9 @@
         $.getJSON('<?=base_url('getForexRate');?>', {date: normDate}, function(res){
           if(res.success){
             forexRate = res.rate;
-            var eur = amount / res.rate;
+            var converted = currency === 'rwf' ? amount / res.rate : amount * res.rate;
             $('#eurConversionResult').html(
-              eur.toFixed(2) + ' <span class="fs-6">EUR</span>'
+              converted.toFixed(2) + ' <span class="fs-6">' + target + '</span>'
             );
             $('#eurConversionDetail').html(
               'Rate on ' + res.rate_date + ': <strong>' + parseFloat(res.rate).toFixed(2) + ' RWF = 1 EUR</strong>'

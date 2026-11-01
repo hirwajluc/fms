@@ -1534,16 +1534,14 @@ class Fms_model_enhanced extends CI_Model{
         );
     }
 
-    public function bulk_save_forex_rates($rows, $user_id, $allow_overwrite = TRUE){
-        $inserted = 0; $updated = 0; $skipped = 0; $errors = [];
+    public function bulk_save_forex_rates($rows, $user_id){
+        $inserted = 0; $updated = 0; $errors = [];
         foreach($rows as $row){
             $date = $row['date'];
             $rate = $row['rate'];
             if(!$date || !is_numeric($rate) || $rate <= 0){ $errors[] = $date ?: '(empty date)'; continue; }
             $existing = $this->get_forex_rate_by_date($date);
-            if($existing && !$allow_overwrite){
-                $skipped++;
-            } elseif($existing){
+            if($existing){
                 $this->db->query("UPDATE forex_rates SET rwf_per_eur=?, created_by=?, created_at=NOW() WHERE rate_date=?", [(float)$rate, (int)$user_id, $date]);
                 $updated++;
             } else {
@@ -1551,7 +1549,7 @@ class Fms_model_enhanced extends CI_Model{
                 $inserted++;
             }
         }
-        return ['inserted' => $inserted, 'updated' => $updated, 'skipped' => $skipped, 'errors' => $errors];
+        return ['inserted' => $inserted, 'updated' => $updated, 'errors' => $errors];
     }
 
     public function delete_forex_rate($id){

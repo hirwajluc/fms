@@ -37,7 +37,7 @@
 
           <h4 class="fw-bold py-3 mb-4">
             <span class="text-muted fw-light">Settings /</span> Forex Exchange
-            <small class="text-muted fs-6 fw-normal ms-2">RWF → EUR daily rates</small>
+            <small class="text-muted fs-6 fw-normal ms-2">EUR ⇄ RWF daily rates</small>
           </h4>
 
           <?php if($this->session->flashdata('success')): ?>
@@ -85,7 +85,7 @@
                   </div>
                   <div>
                     <div class="fw-bold fs-4"><?=$last_rate ? number_format($last_rate, 2) : '—';?> RWF</div>
-                    <div class="text-muted small">Latest rate (= 1 EUR)</div>
+                    <div class="text-muted small">Latest rate (= 1 EUR)<?=$last_rate ? ', 1 RWF = ' . number_format(1 / $last_rate, 6) . ' EUR' : '';?></div>
                   </div>
                 </div>
               </div>
@@ -138,13 +138,12 @@
                     <th>#</th>
                     <th>Date</th>
                     <th>Day</th>
-                    <th>RWF → EUR Rate</th>
+                    <th>EUR → RWF</th>
+                    <th>RWF → EUR</th>
                     <th>Example conversion</th>
                     <th>Added By</th>
                     <th>Added On</th>
-                    <?php if($can_manage_forex): ?>
                     <th>Action</th>
-                    <?php endif; ?>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,18 +158,27 @@
                       <small class="text-muted d-block">= 1 EUR</small>
                     </td>
                     <td>
-                      <small class="text-muted">10,000 RWF = <strong><?=number_format(10000 / $r['rwf_per_eur'], 2);?> EUR</strong></small>
+                      <span class="fw-semibold text-primary"><?=number_format(1 / $r['rwf_per_eur'], 6);?> EUR</span>
+                      <small class="text-muted d-block">= 1 RWF</small>
+                    </td>
+                    <td>
+                      <small class="text-muted d-block">10,000 RWF = <strong><?=number_format(10000 / $r['rwf_per_eur'], 2);?> EUR</strong></small>
+                      <small class="text-muted d-block">100 EUR = <strong><?=number_format(100 * $r['rwf_per_eur'], 2);?> RWF</strong></small>
                     </td>
                     <td><?=htmlspecialchars($r['added_by_name'] ?? '—');?></td>
                     <td class="text-muted small"><?=date('d M Y H:i', strtotime($r['created_at']));?></td>
-                    <?php if($can_manage_forex): ?>
-                    <td>
+                    <td class="text-nowrap">
+                      <button type="button" class="btn btn-sm btn-outline-primary" title="Update this rate"
+                              onclick="editRate('<?=$r['rate_date'];?>', '<?=(float)$r['rwf_per_eur'];?>')">
+                        <i class="ti ti-pencil"></i>
+                      </button>
+                      <?php if($can_manage_forex): ?>
                       <button type="button" class="btn btn-sm btn-outline-danger"
                               onclick="confirmDelete(<?=$r['id'];?>, '<?=date('d M Y', strtotime($r['rate_date']));?>')">
                         <i class="ti ti-trash"></i>
                       </button>
+                      <?php endif; ?>
                     </td>
-                    <?php endif; ?>
                   </tr>
                   <?php endforeach; ?>
                   <?php endif; ?>
@@ -208,29 +216,30 @@
         <div class="modal-body">
           <div class="alert alert-info py-2 small mb-3">
             <i class="ti ti-info-circle me-1"></i>
-            Enter how many <strong>RWF = 1 EUR</strong> for that day (from BNR or your source).
-            Used to convert RWF expenses → EUR.
-            <?php if($can_manage_forex): ?>
-            If a rate already exists for the date it will be overwritten.
-            <?php else: ?>
-            If a rate already exists for the date, only a Super Admin can change it.
-            <?php endif; ?>
+            Enter the rate for that day in either direction (from BNR or your source).
+            The other direction is worked out automatically.
+            If a rate already exists for the date it will be updated.
           </div>
           <div class="mb-3">
             <label class="form-label" for="rate_date">Date <span class="text-danger">*</span></label>
-            <input type="date" id="rate_date" name="rate_date" class="form-control"
-                   max="<?=date('Y-m-d');?>" required />
+            <input type="date" id="rate_date" name="rate_date" class="form-control" required />
           </div>
           <div class="mb-3">
-            <label class="form-label" for="rwf_per_eur">
-              RWF → EUR rate <span class="text-danger">*</span>
-            </label>
+            <label class="form-label" for="rate_direction">Direction <span class="text-danger">*</span></label>
+            <select id="rate_direction" name="direction" class="form-select">
+              <option value="eur_to_rwf">EUR → RWF</option>
+              <option value="rwf_to_eur">RWF → EUR</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rate_value">Rate <span class="text-danger">*</span></label>
             <div class="input-group">
-              <input type="number" id="rwf_per_eur" name="rwf_per_eur" class="form-control"
-                     step="0.0001" min="1" placeholder="e.g. 1210.50" required />
-              <span class="input-group-text">RWF = 1 EUR</span>
+              <span class="input-group-text" id="rate_prefix">1 EUR =</span>
+              <input type="number" id="rate_value" name="rate" class="form-control"
+                     step="any" min="0.000001" placeholder="e.g. 1700.50" required />
+              <span class="input-group-text" id="rate_suffix">RWF</span>
             </div>
-            <div class="form-text">Example: enter <strong>1210.50</strong> if 1,210.50 RWF converts to 1 EUR that day.</div>
+            <div class="form-text" id="rate_other_way"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -253,15 +262,20 @@
       <div class="modal-body">
         <div class="alert alert-info py-2 small mb-3">
           <i class="ti ti-info-circle me-1"></i>
-          The file must have <strong>Column A = Date</strong> and <strong>Column B = RWF → EUR rate</strong>
-          (how many RWF equal 1 EUR, e.g. 1210.50).
+          The file must have <strong>Column A = Date</strong> and <strong>Column B = Rate</strong>
+          in the direction selected below.
           Row 1 is the header and is skipped automatically.
-          <?php if(!$can_manage_forex): ?>
-          Dates that already have a rate are left unchanged.
-          <?php endif; ?>
+          Dates that already have a rate are updated.
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="upload_direction">Rates in this file are <span class="text-danger">*</span></label>
+          <select id="upload_direction" class="form-select">
+            <option value="eur_to_rwf">EUR → RWF (e.g. 1700.50)</option>
+            <option value="rwf_to_eur">RWF → EUR (e.g. 0.000588)</option>
+          </select>
         </div>
         <div class="mb-3 text-center">
-          <a href="<?=base_url('downloadForexTemplate');?>" class="btn btn-outline-success btn-sm">
+          <a href="<?=base_url('downloadForexTemplate');?>?direction=eur_to_rwf" id="templateLink" class="btn btn-outline-success btn-sm">
             <i class="ti ti-download me-1"></i> Download Template
           </a>
         </div>
@@ -321,8 +335,32 @@ $(function(){
   $('#forexTable').DataTable({
     order: [[1, 'desc']],
     pageLength: 25,
-    columnDefs: [{ targets: <?=$can_manage_forex ? '[0, 7]' : '[0]';?>, orderable: false }],
+    columnDefs: [{ targets: [0, 8], orderable: false }],
     language: { emptyTable: 'No exchange rates recorded yet.' }
+  });
+
+  // Add / Update modal: the rate can be entered in either direction
+  function refreshRateModal(){
+    var toRwf = $('#rate_direction').val() === 'eur_to_rwf';
+    var rate  = parseFloat($('#rate_value').val());
+    $('#rate_prefix').text(toRwf ? '1 EUR =' : '1 RWF =');
+    $('#rate_suffix').text(toRwf ? 'RWF' : 'EUR');
+    $('#rate_value').attr('placeholder', toRwf ? 'e.g. 1700.50' : 'e.g. 0.000588');
+    if(rate > 0){
+      $('#rate_other_way').text(toRwf
+        ? 'Same as 1 RWF = ' + (1 / rate).toFixed(6) + ' EUR'
+        : 'Same as 1 EUR = ' + (1 / rate).toFixed(2) + ' RWF');
+    } else {
+      $('#rate_other_way').text('');
+    }
+  }
+  $('#rate_direction').on('change', function(){ $('#rate_value').val(''); refreshRateModal(); });
+  $('#rate_value').on('input', refreshRateModal);
+  $('#addRateModal').on('hidden.bs.modal', function(){ $(this).find('form')[0].reset(); refreshRateModal(); });
+
+  // Template matches the direction chosen for the upload
+  $('#upload_direction').on('change', function(){
+    $('#templateLink').attr('href', '<?=base_url('downloadForexTemplate');?>?direction=' + $(this).val());
   });
 
   // Upload Excel
@@ -342,6 +380,7 @@ $(function(){
 
     var fd = new FormData();
     fd.append('forex_file', file);
+    fd.append('direction', $('#upload_direction').val());
 
     $.ajax({
       url:         '<?=base_url('uploadForexExcel');?>',
@@ -368,6 +407,13 @@ $(function(){
   });
 
 });
+
+function editRate(date, rate){
+  $('#rate_date').val(date);
+  $('#rate_direction').val('eur_to_rwf');
+  $('#rate_value').val(rate).trigger('input');
+  new bootstrap.Modal(document.getElementById('addRateModal')).show();
+}
 
 <?php if($can_manage_forex): ?>
 function confirmDelete(id, dateLabel){

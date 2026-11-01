@@ -44,7 +44,7 @@ fms/
 |---|---|---|
 | Super Admin | 1 | Full access |
 | Admin | 2 | Timesheets, Expenses, Users |
-| Institution Coordinator | 3 | Own timesheets, Expenses, Other Files, Forex (view and add new rates) |
+| Institution Coordinator | 3 | Own timesheets, Expenses, Other Files, Forex (add and update rates) |
 | Member / Staff | 4 | Own timesheets only |
 
 ## Deployment Workflow

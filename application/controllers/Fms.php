@@ -3419,12 +3419,18 @@ class Fms extends CI_Controller {
 		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
 		}
-		$date    = $this->input->post('rate_date', TRUE);
-		$rate    = $this->input->post('rwf_per_eur', TRUE);
-		$user_id = $this->session->userdata('fms_user_id');
+		$date      = $this->input->post('rate_date', TRUE);
+		$rate      = $this->input->post('rate', TRUE);
+		$direction = $this->input->post('direction', TRUE) ?: 'eur_to_rwf';
+		$user_id   = $this->session->userdata('fms_user_id');
 
 		if(empty($date) || empty($rate)){
 			$this->session->set_flashdata('error', 'Date and rate are required.');
+			redirect('forexExchange');
+			return;
+		}
+		if(!in_array($direction, ['eur_to_rwf', 'rwf_to_eur'], TRUE)){
+			$this->session->set_flashdata('error', 'Invalid direction.');
 			redirect('forexExchange');
 			return;
 		}
@@ -3439,15 +3445,29 @@ class Fms extends CI_Controller {
 			redirect('forexExchange');
 			return;
 		}
-		if(!$this->auth_manager->can_manage_forex() && $this->fmsm_enhanced->get_forex_rate_by_date($date)){
-			$this->session->set_flashdata('error', 'A rate for ' . date('d M Y', strtotime($date)) . ' already exists. Only a Super Admin can change it.');
+		$rwf_per_eur = $this->forex_rate_to_rwf_per_eur($rate, $direction);
+		if($rwf_per_eur === NULL){
+			$this->session->set_flashdata('error', 'That rate does not fit the selected direction. Example: 1 EUR = 1,700 RWF, or 1 RWF = 0.000588 EUR.');
 			redirect('forexExchange');
 			return;
 		}
 
-		$this->fmsm_enhanced->save_forex_rate($date, floatval($rate), $user_id);
-		$this->session->set_flashdata('success', 'Rate for ' . date('d M Y', strtotime($date)) . ' saved successfully.');
+		$this->fmsm_enhanced->save_forex_rate($date, $rwf_per_eur, $user_id);
+		$this->session->set_flashdata('success', 'Rate for ' . date('d M Y', strtotime($date)) . ' saved: 1 EUR = ' . number_format($rwf_per_eur, 2) . ' RWF (1 RWF = ' . number_format(1 / $rwf_per_eur, 6) . ' EUR).');
 		redirect('forexExchange');
+	}
+
+	/**
+	 * Convert a rate entered in either direction to the stored form (1 EUR = X RWF).
+	 * Returns NULL if it cannot be a EUR/RWF rate: 1 EUR is always worth more than
+	 * 1 RWF, which also catches a rate entered under the wrong direction.
+	 */
+	private function forex_rate_to_rwf_per_eur($rate, $direction){
+		if(!is_numeric($rate) || floatval($rate) <= 0){
+			return NULL;
+		}
+		$rwf_per_eur = $direction === 'rwf_to_eur' ? 1 / floatval($rate) : floatval($rate);
+		return ($rwf_per_eur >= 1 && $rwf_per_eur <= 999999.9999) ? round($rwf_per_eur, 4) : NULL;
 	}
 
 	public function uploadForexExcel(){
@@ -3463,6 +3483,10 @@ class Fms extends CI_Controller {
 		if($_FILES['forex_file']['error'] !== UPLOAD_ERR_OK){
 			echo json_encode(['success' => false, 'message' => 'Upload error.']); return;
 		}
+		$direction = $this->input->post('direction', TRUE) ?: 'eur_to_rwf';
+		if(!in_array($direction, ['eur_to_rwf', 'rwf_to_eur'], TRUE)){
+			echo json_encode(['success' => false, 'message' => 'Invalid direction.']); return;
+		}
 
 		require_once FCPATH . 'vendor/autoload.php';
 
@@ -3470,6 +3494,7 @@ class Fms extends CI_Controller {
 			$spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($_FILES['forex_file']['tmp_name']);
 			$sheet       = $spreadsheet->getActiveSheet();
 			$rows        = [];
+			$invalid     = 0;
 
 			foreach($sheet->getRowIterator(2) as $row){ // skip header row 1
 				$cells = $row->getCellIterator();
@@ -3493,25 +3518,27 @@ class Fms extends CI_Controller {
 					$date_str = $dt ? $dt->format('Y-m-d') : '';
 				}
 
-				if(empty($date_str) || !is_numeric($raw_rate) || floatval($raw_rate) <= 0) continue;
+				$rwf_per_eur = $this->forex_rate_to_rwf_per_eur($raw_rate, $direction);
+				if(empty($date_str) || $rwf_per_eur === NULL){
+					$invalid++;
+					continue;
+				}
 
-				$rows[] = ['date' => $date_str, 'rate' => floatval($raw_rate)];
+				$rows[] = ['date' => $date_str, 'rate' => $rwf_per_eur];
 			}
 
 			if(empty($rows)){
-				echo json_encode(['success' => false, 'message' => 'No valid rows found in the file. Make sure column A = Date and column B = Rate (RWF per EUR).']);
+				echo json_encode(['success' => false, 'message' => 'No valid rows found in the file. Make sure column A = Date, column B = Rate, and the selected direction matches the rates in the file.']);
 				return;
 			}
 
 			$user_id = $this->session->userdata('fms_user_id');
-			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id, $this->auth_manager->can_manage_forex());
+			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id);
+			$invalid += count($result['errors']);
 
 			$msg = $result['inserted'] . ' rate(s) added, ' . $result['updated'] . ' updated.';
-			if(!empty($result['skipped'])){
-				$msg .= ' ' . $result['skipped'] . ' date(s) already had a rate and were left unchanged.';
-			}
-			if(!empty($result['errors'])){
-				$msg .= ' Skipped ' . count($result['errors']) . ' invalid row(s).';
+			if($invalid > 0){
+				$msg .= ' Skipped ' . $invalid . ' invalid row(s).';
 			}
 			echo json_encode(['success' => true, 'message' => $msg]);
 
@@ -3540,8 +3567,10 @@ class Fms extends CI_Controller {
 		$sheet->setTitle('Forex Rates');
 
 		// Header row
+		$rwf_to_eur = $this->input->get('direction', TRUE) === 'rwf_to_eur';
+
 		$sheet->setCellValue('A1', 'Date (YYYY-MM-DD)');
-		$sheet->setCellValue('B1', 'Rate (1 EUR = X RWF)');
+		$sheet->setCellValue('B1', $rwf_to_eur ? 'Rate (1 RWF = X EUR)' : 'Rate (1 EUR = X RWF)');
 
 		// Style header
 		$headerStyle = [
@@ -3561,7 +3590,7 @@ class Fms extends CI_Controller {
 		$r = 2;
 		foreach($samples as $s){
 			$sheet->setCellValue('A'.$r, $s[0]);
-			$sheet->setCellValue('B'.$r, $s[1]);
+			$sheet->setCellValue('B'.$r, $rwf_to_eur ? round(1 / $s[1], 6) : $s[1]);
 			$r++;
 		}
 
@@ -3569,7 +3598,7 @@ class Fms extends CI_Controller {
 		$sheet->freezePane('A2');
 
 		$writer   = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-		$filename = 'forex_rates_template.xlsx';
+		$filename = $rwf_to_eur ? 'forex_rates_rwf_to_eur_template.xlsx' : 'forex_rates_template.xlsx';
 
 		header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 		header('Content-Disposition: attachment; filename="' . $filename . '"');
