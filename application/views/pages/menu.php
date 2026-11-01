@@ -98,19 +98,27 @@
                       <div data-i18n="Settings">Settings</div>
                     </a>
                     <ul class="menu-sub">
+                      <li class="menu-item <?=($this->router->fetch_method()=='settings')?'active':'';?>">
+                        <a href="<?=base_url('settings');?>" class="menu-link">
+                          <i class="menu-icon tf-icons ti ti-mail"></i>
+                          <div data-i18n="EmailNotifications">Email Notifications</div>
+                        </a>
+                      </li>
                       <li class="menu-item <?=($this->router->fetch_method()=='reportSignatures')?'active':'';?>">
                         <a href="<?=base_url('reportSignatures');?>" class="menu-link">
                           <i class="menu-icon tf-icons ti ti-arrow-right"></i>
                           <div data-i18n="ReportSignatures">Report Signatures</div>
                         </a>
                       </li>
-                      <?php if($this->auth_manager->is_super_admin()): ?>
+                      <?php if($this->auth_manager->can_access_forex()): ?>
                       <li class="menu-item <?=($this->router->fetch_method()=='forexExchange')?'active':'';?>">
                         <a href="<?=base_url('forexExchange');?>" class="menu-link">
                           <i class="menu-icon tf-icons ti ti-currency-euro"></i>
                           <div data-i18n="ForexExchange">Forex Exchange</div>
                         </a>
                       </li>
+                      <?php endif; ?>
+                      <?php if($this->auth_manager->is_super_admin()): ?>
                       <li class="menu-item <?=($this->router->fetch_method()=='emailTester')?'active':'';?>">
                         <a href="<?=base_url('emailTester');?>" class="menu-link">
                           <i class="menu-icon tf-icons ti ti-mail-check"></i>
@@ -119,6 +127,14 @@
                       </li>
                       <?php endif; ?>
                     </ul>
+                  </li>
+                  <?php else: ?>
+                  <!-- Members have no Settings group: link straight to their own settings -->
+                  <li class="menu-item <?=($this->router->fetch_method()=='settings')?'active':'';?>">
+                    <a href="<?=base_url('settings');?>" class="menu-link">
+                      <i class="menu-icon tf-icons ti ti-settings"></i>
+                      <div data-i18n="Settings">Settings</div>
+                    </a>
                   </li>
                   <?php endif; ?>
                 </ul>

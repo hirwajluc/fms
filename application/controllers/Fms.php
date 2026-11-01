@@ -3406,7 +3406,7 @@ class Fms extends CI_Controller {
 	// ============================================
 
 	public function forexExchange(){
-		if(!$this->auth_manager->is_super_admin()){
+		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
 		}
 		$this->data['title']  = 'FMS - Forex Exchange';
@@ -3416,7 +3416,7 @@ class Fms extends CI_Controller {
 	}
 
 	public function saveForexRate(){
-		if(!$this->auth_manager->is_super_admin()){
+		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
 		}
 		$date    = $this->input->post('rate_date', TRUE);
@@ -3439,6 +3439,11 @@ class Fms extends CI_Controller {
 			redirect('forexExchange');
 			return;
 		}
+		if(!$this->auth_manager->can_manage_forex() && $this->fmsm_enhanced->get_forex_rate_by_date($date)){
+			$this->session->set_flashdata('error', 'A rate for ' . date('d M Y', strtotime($date)) . ' already exists. Only a Super Admin can change it.');
+			redirect('forexExchange');
+			return;
+		}
 
 		$this->fmsm_enhanced->save_forex_rate($date, floatval($rate), $user_id);
 		$this->session->set_flashdata('success', 'Rate for ' . date('d M Y', strtotime($date)) . ' saved successfully.');
@@ -3446,7 +3451,7 @@ class Fms extends CI_Controller {
 	}
 
 	public function uploadForexExcel(){
-		if(!$this->auth_manager->is_super_admin()){
+		if(!$this->auth_manager->can_access_forex()){
 			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
 		}
 		if(!$this->input->is_ajax_request()){
@@ -3499,9 +3504,12 @@ class Fms extends CI_Controller {
 			}
 
 			$user_id = $this->session->userdata('fms_user_id');
-			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id);
+			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id, $this->auth_manager->can_manage_forex());
 
 			$msg = $result['inserted'] . ' rate(s) added, ' . $result['updated'] . ' updated.';
+			if(!empty($result['skipped'])){
+				$msg .= ' ' . $result['skipped'] . ' date(s) already had a rate and were left unchanged.';
+			}
 			if(!empty($result['errors'])){
 				$msg .= ' Skipped ' . count($result['errors']) . ' invalid row(s).';
 			}
@@ -3513,7 +3521,7 @@ class Fms extends CI_Controller {
 	}
 
 	public function deleteForexRate($id){
-		if(!$this->auth_manager->is_super_admin()){
+		if(!$this->auth_manager->can_manage_forex()){
 			show_error('Access Denied', 403);
 		}
 		$this->fmsm_enhanced->delete_forex_rate($id);
@@ -3522,7 +3530,7 @@ class Fms extends CI_Controller {
 	}
 
 	public function downloadForexTemplate(){
-		if(!$this->auth_manager->is_super_admin()){
+		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
 		}
 		require_once FCPATH . 'vendor/autoload.php';
@@ -3571,6 +3579,10 @@ class Fms extends CI_Controller {
 	}
 
 	public function getForexRate(){
+		// Rate lookup for the expense form: same roles that can open that form
+		if(!$this->auth_manager->can_upload_expenses()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
+		}
 		$date = $this->input->get('date', TRUE);
 		if(empty($date)){
 			echo json_encode(['success' => false, 'message' => 'No date provided.']);
@@ -3589,6 +3601,55 @@ class Fms extends CI_Controller {
 	}
 
 	// ==================== END FOREX ====================
+
+	// ============================================
+	// USER SETTINGS
+	// ============================================
+
+	public function settings(){
+		$this->data['title'] = 'FMS - Settings';
+
+		$user_id = $this->session->userdata('fms_user_id');
+		$this->data['notifications_supported'] = $this->fmsm_enhanced->email_notifications_supported();
+		$this->data['notifications_enabled']   = $this->fmsm_enhanced->get_email_notification_preference($user_id);
+
+		$this->load->view('pages/settings', $this->data);
+	}
+
+	public function updateNotificationPreference(){
+		header('Content-Type: application/json');
+
+		// AJAX POST only, so a link or a cross-site form cannot change the setting
+		if($this->input->method() !== 'post' || !$this->input->is_ajax_request()){
+			set_status_header(405);
+			echo json_encode(['success' => false, 'message' => 'Invalid request.']); return;
+		}
+
+		$enabled = $this->input->post('enabled');
+		if($enabled !== '0' && $enabled !== '1'){
+			set_status_header(400);
+			echo json_encode(['success' => false, 'message' => 'Invalid value.']); return;
+		}
+
+		if(!$this->fmsm_enhanced->email_notifications_supported()){
+			set_status_header(503);
+			echo json_encode(['success' => false, 'message' => 'This setting is not available yet. Please contact your administrator.']); return;
+		}
+
+		// Always the logged-in user: the target is never taken from the request
+		$user_id = $this->session->userdata('fms_user_id');
+		if(!$this->fmsm_enhanced->set_email_notification_preference($user_id, $enabled === '1')){
+			set_status_header(500);
+			echo json_encode(['success' => false, 'message' => 'Could not save your preference. Please try again.']); return;
+		}
+
+		$state = $enabled === '1' ? 'enabled' : 'disabled';
+		$this->fmsm_enhanced->log_activity($user_id, 'update_email_notifications', 'user', $user_id, 'Email notifications ' . $state);
+
+		echo json_encode(['success' => true, 'enabled' => $enabled === '1', 'message' => 'Email notifications ' . $state . '.']);
+	}
+
+	// ==================== END USER SETTINGS ====================
 
 	// ============================================================
 	// FORCED PASSWORD CHANGE (first login / after reset)
@@ -3665,6 +3726,8 @@ class Fms extends CI_Controller {
 		if(!filter_var($to, FILTER_VALIDATE_EMAIL)){
 			echo json_encode(['success'=>false,'message'=>'Invalid email address.']); return;
 		}
+
+		$this->fms_mailer->ignore_preferences = true;
 
 		// Mock data for each email type
 		$mock_ts = [

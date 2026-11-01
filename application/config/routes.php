@@ -106,6 +106,10 @@ $route['profile']         = 'fms/profile';
 $route['updateProfile']   = 'fms/updateProfile';
 $route['updatePassword']  = 'fms/updatePassword';
 
+// User settings routes
+$route['settings']                     = 'fms/settings';
+$route['updateNotificationPreference'] = 'fms/updateNotificationPreference';
+
 // Other File Comments routes
 $route['addFileComment']                    = 'fms/addFileComment';
 $route['deleteFileComment/(:num)']          = 'fms/deleteFileComment/$1';

@@ -1534,14 +1534,16 @@ class Fms_model_enhanced extends CI_Model{
         );
     }
 
-    public function bulk_save_forex_rates($rows, $user_id){
-        $inserted = 0; $updated = 0; $errors = [];
+    public function bulk_save_forex_rates($rows, $user_id, $allow_overwrite = TRUE){
+        $inserted = 0; $updated = 0; $skipped = 0; $errors = [];
         foreach($rows as $row){
             $date = $row['date'];
             $rate = $row['rate'];
             if(!$date || !is_numeric($rate) || $rate <= 0){ $errors[] = $date ?: '(empty date)'; continue; }
             $existing = $this->get_forex_rate_by_date($date);
-            if($existing){
+            if($existing && !$allow_overwrite){
+                $skipped++;
+            } elseif($existing){
                 $this->db->query("UPDATE forex_rates SET rwf_per_eur=?, created_by=?, created_at=NOW() WHERE rate_date=?", [(float)$rate, (int)$user_id, $date]);
                 $updated++;
             } else {
@@ -1549,7 +1551,7 @@ class Fms_model_enhanced extends CI_Model{
                 $inserted++;
             }
         }
-        return ['inserted' => $inserted, 'updated' => $updated, 'errors' => $errors];
+        return ['inserted' => $inserted, 'updated' => $updated, 'skipped' => $skipped, 'errors' => $errors];
     }
 
     public function delete_forex_rate($id){
@@ -1568,4 +1570,57 @@ class Fms_model_enhanced extends CI_Model{
     }
 
     // ==================== END FOREX ====================
+
+    // ============================================
+    // EMAIL NOTIFICATION PREFERENCES
+    // ============================================
+
+    private $email_preference_supported = NULL;
+
+    /**
+     * users.email_notifications_enabled is added by db/database_update.sql, which is
+     * applied manually. Until then everyone keeps receiving notifications as before.
+     */
+    public function email_notifications_supported(){
+        if($this->email_preference_supported === NULL){
+            $this->email_preference_supported = $this->db->field_exists('email_notifications_enabled', 'users');
+        }
+        return $this->email_preference_supported;
+    }
+
+    public function get_email_notification_preference($user_id){
+        if(!$this->email_notifications_supported()) return TRUE;
+
+        $row = $this->db->select('email_notifications_enabled')
+                        ->where('user_id', $user_id)
+                        ->get('users')->row_array();
+        return $row ? (bool)$row['email_notifications_enabled'] : TRUE;
+    }
+
+    public function set_email_notification_preference($user_id, $enabled){
+        $this->db->where('user_id', $user_id);
+        return $this->db->update('users', array('email_notifications_enabled' => $enabled ? 1 : 0));
+    }
+
+    /**
+     * Should an optional notification go to this address?
+     * Callers pass users.email or staff.email (get_user_by_id returns the latter),
+     * so both are checked. An address with no account keeps receiving mail.
+     */
+    public function email_notifications_enabled_for($email){
+        if(!$this->email_notifications_supported()) return TRUE;
+
+        $row = $this->db->select('email_notifications_enabled')
+                        ->where('email', $email)
+                        ->get('users')->row_array();
+        if(!$row){
+            $row = $this->db->select('users.email_notifications_enabled')
+                            ->join('staff', 'staff.staff_id = users.staff_id', 'inner')
+                            ->where('staff.email', $email)
+                            ->get('users')->row_array();
+        }
+        return $row ? (bool)$row['email_notifications_enabled'] : TRUE;
+    }
+
+    // ==================== END EMAIL NOTIFICATION PREFERENCES ====================
 }

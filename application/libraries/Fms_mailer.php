@@ -92,7 +92,7 @@ class Fms_mailer {
 
         foreach((array)$recipient_emails as $email){
             if(filter_var($email, FILTER_VALIDATE_EMAIL)){
-                $this->_send($email, '', $subject, $body);
+                $this->_send_notification($email, '', $subject, $body);
             }
         }
         return true;
@@ -119,7 +119,7 @@ class Fms_mailer {
             $this->_app_url() . 'viewTimesheet/' . $timesheet['timesheet_id']
         );
 
-        return $this->_send($staff_email, $staff_name, $subject, $body);
+        return $this->_send_notification($staff_email, $staff_name, $subject, $body);
     }
 
     /** Timesheet rejected — notify the staff member */
@@ -144,7 +144,7 @@ class Fms_mailer {
             $this->_app_url() . 'editTimesheet/' . $timesheet['timesheet_id']
         );
 
-        return $this->_send($staff_email, $staff_name, $subject, $body);
+        return $this->_send_notification($staff_email, $staff_name, $subject, $body);
     }
 
     /** Expense submitted — notify admin / super admin */
@@ -170,7 +170,7 @@ class Fms_mailer {
 
         foreach((array)$recipient_emails as $email){
             if(filter_var($email, FILTER_VALIDATE_EMAIL)){
-                $this->_send($email, '', $subject, $body);
+                $this->_send_notification($email, '', $subject, $body);
             }
         }
         return true;
@@ -198,7 +198,7 @@ class Fms_mailer {
             $this->_app_url() . 'expenses'
         );
 
-        return $this->_send($coordinator_email, $coordinator_name, $subject, $body);
+        return $this->_send_notification($coordinator_email, $coordinator_name, $subject, $body);
     }
 
     /** Expense rejected — notify the coordinator who submitted it */
@@ -222,7 +222,7 @@ class Fms_mailer {
             $this->_app_url() . 'expenses'
         );
 
-        return $this->_send($coordinator_email, $coordinator_name, $subject, $body);
+        return $this->_send_notification($coordinator_email, $coordinator_name, $subject, $body);
     }
 
     /** Monthly report submitted — notify admin / super admin */
@@ -247,7 +247,7 @@ class Fms_mailer {
 
         foreach((array)$recipient_emails as $email){
             if(filter_var($email, FILTER_VALIDATE_EMAIL)){
-                $this->_send($email, '', $subject, $body);
+                $this->_send_notification($email, '', $subject, $body);
             }
         }
         return true;
@@ -274,7 +274,7 @@ class Fms_mailer {
             $this->_app_url() . 'viewMonthlyReport/' . $report['report_id']
         );
 
-        return $this->_send($coordinator_email, $coordinator_name, $subject, $body);
+        return $this->_send_notification($coordinator_email, $coordinator_name, $subject, $body);
     }
 
     /** Monthly report rejected — notify the coordinator */
@@ -298,7 +298,7 @@ class Fms_mailer {
             $this->_app_url() . 'viewMonthlyReport/' . $report['report_id']
         );
 
-        return $this->_send($coordinator_email, $coordinator_name, $subject, $body);
+        return $this->_send_notification($coordinator_email, $coordinator_name, $subject, $body);
     }
 
     /**
@@ -336,7 +336,7 @@ class Fms_mailer {
             'View Work Package',
             $this->_app_url() . 'otherFiles'
         );
-        $this->_send($uploader_email, $uploader_name, 'File Uploaded – ' . htmlspecialchars($file['display_name']), $uploader_body);
+        $this->_send_notification($uploader_email, $uploader_name, 'File Uploaded – ' . htmlspecialchars($file['display_name']), $uploader_body);
 
         // ── Notification to each super admin ──────────────────────────
         if(!empty($sa_emails)){
@@ -351,7 +351,7 @@ class Fms_mailer {
             );
             foreach((array)$sa_emails as $email){
                 if(filter_var($email, FILTER_VALIDATE_EMAIL)){
-                    $this->_send($email, '', 'New WP File – ' . htmlspecialchars($file['display_name']), $admin_body);
+                    $this->_send_notification($email, '', 'New WP File – ' . htmlspecialchars($file['display_name']), $admin_body);
                 }
             }
         }
@@ -386,6 +386,20 @@ class Fms_mailer {
     // PRIVATE HELPERS
     // ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Send an optional application notification, unless the recipient has turned
+     * off email notifications on their Settings page.
+     * Essential mail (account_created, password_changed, password_reset) calls
+     * _send() directly and cannot be turned off.
+     */
+    private function _send_notification($to_email, $to_name, $subject, $body){
+        if(!$this->ignore_preferences && !$this->CI->fmsm_enhanced->email_notifications_enabled_for($to_email)){
+            log_message('info', 'FMS_Mailer: "' . $subject . '" not sent to ' . $to_email . ' (email notifications turned off).');
+            return true;
+        }
+        return $this->_send($to_email, $to_name, $subject, $body);
+    }
+
     private function _send($to_email, $to_name, $subject, $body){
         // Buffer any stray PHP output (warnings from fsockopen etc.) so they
         // never corrupt a JSON response in the caller.
@@ -415,6 +429,9 @@ class Fms_mailer {
 
     /** Last SMTP error/debug output — readable after a failed send. */
     public $_last_error = '';
+
+    /** Set by the Email Tester only: a test send must reach the address it was aimed at. */
+    public $ignore_preferences = false;
 
     private function _app_url(){
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';

@@ -126,6 +126,21 @@ class Auth_manager {
     }
 
     /**
+     * Check if user can access the Forex module (view rates, add new rates)
+     */
+    public function can_access_forex(){
+        return $this->is_super_admin() || $this->is_coordinator();
+    }
+
+    /**
+     * Check if user can overwrite or delete existing Forex rates.
+     * Rates are shared by all partners, so this stays with Super Admin.
+     */
+    public function can_manage_forex(){
+        return $this->is_super_admin();
+    }
+
+    /**
      * Check if user can view all reports
      */
     public function can_view_all_reports(){

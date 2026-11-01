@@ -59,6 +59,7 @@
           $earliest   = $stats['earliest'] ?? null;
           $latest_date= $stats['latest']   ?? null;
           $last_rate  = $stats['last_rate'] ?? null;
+          $can_manage_forex = $this->auth_manager->can_manage_forex();
           ?>
 
           <!-- Stats row -->
@@ -141,7 +142,9 @@
                     <th>Example conversion</th>
                     <th>Added By</th>
                     <th>Added On</th>
+                    <?php if($can_manage_forex): ?>
                     <th>Action</th>
+                    <?php endif; ?>
                   </tr>
                 </thead>
                 <tbody>
@@ -160,12 +163,14 @@
                     </td>
                     <td><?=htmlspecialchars($r['added_by_name'] ?? '—');?></td>
                     <td class="text-muted small"><?=date('d M Y H:i', strtotime($r['created_at']));?></td>
+                    <?php if($can_manage_forex): ?>
                     <td>
                       <button type="button" class="btn btn-sm btn-outline-danger"
                               onclick="confirmDelete(<?=$r['id'];?>, '<?=date('d M Y', strtotime($r['rate_date']));?>')">
                         <i class="ti ti-trash"></i>
                       </button>
                     </td>
+                    <?php endif; ?>
                   </tr>
                   <?php endforeach; ?>
                   <?php endif; ?>
@@ -204,7 +209,12 @@
           <div class="alert alert-info py-2 small mb-3">
             <i class="ti ti-info-circle me-1"></i>
             Enter how many <strong>RWF = 1 EUR</strong> for that day (from BNR or your source).
-            Used to convert RWF expenses → EUR. If a rate already exists for the date it will be overwritten.
+            Used to convert RWF expenses → EUR.
+            <?php if($can_manage_forex): ?>
+            If a rate already exists for the date it will be overwritten.
+            <?php else: ?>
+            If a rate already exists for the date, only a Super Admin can change it.
+            <?php endif; ?>
           </div>
           <div class="mb-3">
             <label class="form-label" for="rate_date">Date <span class="text-danger">*</span></label>
@@ -246,6 +256,9 @@
           The file must have <strong>Column A = Date</strong> and <strong>Column B = RWF → EUR rate</strong>
           (how many RWF equal 1 EUR, e.g. 1210.50).
           Row 1 is the header and is skipped automatically.
+          <?php if(!$can_manage_forex): ?>
+          Dates that already have a rate are left unchanged.
+          <?php endif; ?>
         </div>
         <div class="mb-3 text-center">
           <a href="<?=base_url('downloadForexTemplate');?>" class="btn btn-outline-success btn-sm">
@@ -268,6 +281,7 @@
   </div>
 </div>
 
+<?php if($can_manage_forex): ?>
 <!-- ── Delete confirmation modal ──────────────────────────────────── -->
 <div class="modal fade" id="deleteRateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -288,6 +302,7 @@
     </div>
   </div>
 </div>
+<?php endif; ?>
 
 <!-- JS -->
 <script src="<?=base_url();?>assets/vendor/libs/jquery/jquery.js"></script>
@@ -306,7 +321,7 @@ $(function(){
   $('#forexTable').DataTable({
     order: [[1, 'desc']],
     pageLength: 25,
-    columnDefs: [{ targets: [0, 7], orderable: false }],
+    columnDefs: [{ targets: <?=$can_manage_forex ? '[0, 7]' : '[0]';?>, orderable: false }],
     language: { emptyTable: 'No exchange rates recorded yet.' }
   });
 
@@ -331,6 +346,7 @@ $(function(){
     $.ajax({
       url:         '<?=base_url('uploadForexExcel');?>',
       type:        'POST',
+      dataType:    'json',
       data:        fd,
       processData: false,
       contentType: false,
@@ -353,11 +369,13 @@ $(function(){
 
 });
 
+<?php if($can_manage_forex): ?>
 function confirmDelete(id, dateLabel){
   document.getElementById('deleteDateLabel').textContent  = dateLabel;
   document.getElementById('confirmDeleteLink').href = '<?=base_url('deleteForexRate');?>/' + id;
   new bootstrap.Modal(document.getElementById('deleteRateModal')).show();
 }
+<?php endif; ?>
 </script>
 </body>
 </html>
