@@ -3409,16 +3409,61 @@ class Fms extends CI_Controller {
 		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
 		}
+		$supported  = $this->fmsm_enhanced->forex_partner_rates_supported();
+		$partner_id = $supported ? $this->forex_scope($this->input->get('scope', TRUE), TRUE) : NULL;
+		$partner    = $partner_id ? $this->fmsm_enhanced->get_partner_by_id($partner_id) : NULL;
+
 		$this->data['title']  = 'FMS - Forex Exchange';
-		$this->data['rates']  = $this->fmsm_enhanced->get_all_forex_rates();
-		$this->data['stats']  = $this->fmsm_enhanced->get_forex_stats();
+		$this->data['rates']  = $this->fmsm_enhanced->get_all_forex_rates($partner_id);
+		$this->data['stats']  = $this->fmsm_enhanced->get_forex_stats($partner_id);
+		$this->data['forex_supported']   = $supported;
+		$this->data['forex_scope_value'] = $partner_id ?: 'default';
+		$this->data['forex_scope_name']  = $partner ? $partner['name'] : 'Shared default rates';
+		$this->data['can_edit_rates']    = $supported && $this->auth_manager->can_edit_forex_rates($partner_id);
+		$this->data['forex_partners']    = $this->auth_manager->get_accessible_partners();
 		$this->load->view('pages/forexexchange', $this->data);
+	}
+
+	/**
+	 * Whose rates a request is about: a partner ID, or NULL for the shared default rates.
+	 * A Super Admin can choose any of them. A coordinator always gets their own partner,
+	 * except when viewing the shared default rates, which they cannot change.
+	 */
+	private function forex_scope($requested, $viewing = FALSE){
+		if($this->auth_manager->is_super_admin()){
+			if(!ctype_digit((string)$requested)){
+				return NULL;
+			}
+			if(!$this->fmsm_enhanced->get_partner_by_id($requested)){
+				show_error('Partner not found', 404);
+			}
+			return (int)$requested;
+		}
+		if($viewing && $requested === 'default'){
+			return NULL;
+		}
+		return (int)$this->session->userdata('fms_partner_id') ?: NULL;
+	}
+
+	private function forex_page_url($partner_id){
+		return $this->auth_manager->is_super_admin() ? 'forexExchange?scope=' . ($partner_id ?: 'default') : 'forexExchange';
 	}
 
 	public function saveForexRate(){
 		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
 		}
+		$partner_id = $this->forex_scope($this->input->post('scope', TRUE));
+		if(!$this->auth_manager->can_edit_forex_rates($partner_id)){
+			show_error('Access Denied', 403);
+		}
+		$back = $this->forex_page_url($partner_id);
+		if(!$this->fmsm_enhanced->forex_partner_rates_supported()){
+			$this->session->set_flashdata('error', 'Rates cannot be changed until the database update is applied.');
+			redirect($back);
+			return;
+		}
+
 		$date      = $this->input->post('rate_date', TRUE);
 		$rate      = $this->input->post('rate', TRUE);
 		$direction = $this->input->post('direction', TRUE) ?: 'eur_to_rwf';
@@ -3426,35 +3471,35 @@ class Fms extends CI_Controller {
 
 		if(empty($date) || empty($rate)){
 			$this->session->set_flashdata('error', 'Date and rate are required.');
-			redirect('forexExchange');
+			redirect($back);
 			return;
 		}
 		if(!in_array($direction, ['eur_to_rwf', 'rwf_to_eur'], TRUE)){
 			$this->session->set_flashdata('error', 'Invalid direction.');
-			redirect('forexExchange');
+			redirect($back);
 			return;
 		}
 		if(!is_numeric($rate) || floatval($rate) <= 0){
 			$this->session->set_flashdata('error', 'Rate must be a positive number.');
-			redirect('forexExchange');
+			redirect($back);
 			return;
 		}
 		$date_obj = DateTime::createFromFormat('Y-m-d', $date);
 		if(!$date_obj){
 			$this->session->set_flashdata('error', 'Invalid date format.');
-			redirect('forexExchange');
+			redirect($back);
 			return;
 		}
 		$rwf_per_eur = $this->forex_rate_to_rwf_per_eur($rate, $direction);
 		if($rwf_per_eur === NULL){
 			$this->session->set_flashdata('error', 'That rate does not fit the selected direction. Example: 1 EUR = 1,700 RWF, or 1 RWF = 0.000588 EUR.');
-			redirect('forexExchange');
+			redirect($back);
 			return;
 		}
 
-		$this->fmsm_enhanced->save_forex_rate($date, $rwf_per_eur, $user_id);
+		$this->fmsm_enhanced->save_forex_rate($date, $rwf_per_eur, $user_id, $partner_id);
 		$this->session->set_flashdata('success', 'Rate for ' . date('d M Y', strtotime($date)) . ' saved: 1 EUR = ' . number_format($rwf_per_eur, 2) . ' RWF (1 RWF = ' . number_format(1 / $rwf_per_eur, 6) . ' EUR).');
-		redirect('forexExchange');
+		redirect($back);
 	}
 
 	/**
@@ -3476,6 +3521,13 @@ class Fms extends CI_Controller {
 		}
 		if(!$this->input->is_ajax_request()){
 			show_error('Invalid request', 403);
+		}
+		$partner_id = $this->forex_scope($this->input->post('scope', TRUE));
+		if(!$this->auth_manager->can_edit_forex_rates($partner_id)){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
+		}
+		if(!$this->fmsm_enhanced->forex_partner_rates_supported()){
+			echo json_encode(['success' => false, 'message' => 'Rates cannot be changed until the database update is applied.']); return;
 		}
 		if(empty($_FILES['forex_file']['name'])){
 			echo json_encode(['success' => false, 'message' => 'No file uploaded.']); return;
@@ -3533,7 +3585,7 @@ class Fms extends CI_Controller {
 			}
 
 			$user_id = $this->session->userdata('fms_user_id');
-			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id);
+			$result  = $this->fmsm_enhanced->bulk_save_forex_rates($rows, $user_id, $partner_id);
 			$invalid += count($result['errors']);
 
 			$msg = $result['inserted'] . ' rate(s) added, ' . $result['updated'] . ' updated.';
@@ -3548,12 +3600,23 @@ class Fms extends CI_Controller {
 	}
 
 	public function deleteForexRate($id){
-		if(!$this->auth_manager->can_manage_forex()){
+		if(!$this->auth_manager->can_access_forex()){
 			show_error('Access Denied', 403);
+		}
+		// The partner on the rate itself decides, so a rate cannot be deleted by guessing its ID
+		$rate       = $this->fmsm_enhanced->get_forex_rate_by_id($id);
+		$partner_id = $rate['partner_id'] ?? NULL;
+		if(!$rate || !$this->auth_manager->can_edit_forex_rates($partner_id)){
+			show_error('Access Denied', 403);
+		}
+		if(!$this->fmsm_enhanced->forex_partner_rates_supported()){
+			$this->session->set_flashdata('error', 'Rates cannot be changed until the database update is applied.');
+			redirect($this->forex_page_url($partner_id));
+			return;
 		}
 		$this->fmsm_enhanced->delete_forex_rate($id);
 		$this->session->set_flashdata('success', 'Rate deleted.');
-		redirect('forexExchange');
+		redirect($this->forex_page_url($partner_id));
 	}
 
 	public function downloadForexTemplate(){
@@ -3617,13 +3680,14 @@ class Fms extends CI_Controller {
 			echo json_encode(['success' => false, 'message' => 'No date provided.']);
 			return;
 		}
-		$row = $this->db->query(
-			"SELECT rwf_per_eur, rate_date FROM forex_rates WHERE rate_date <= ? ORDER BY rate_date DESC LIMIT 1",
-			[$date]
-		)->row_array();
+		// A coordinator always gets their own partner's rate; an admin picks the partner on the form
+		$partner_id = $this->auth_manager->is_coordinator()
+			? $this->session->userdata('fms_partner_id')
+			: (int)$this->input->get('partner_id', TRUE);
+		$row = $this->fmsm_enhanced->find_forex_rate($date, $partner_id);
 
 		if($row){
-			echo json_encode(['success' => true, 'rate' => (float)$row['rwf_per_eur'], 'rate_date' => $row['rate_date']]);
+			echo json_encode(['success' => true, 'rate' => (float)$row['rwf_per_eur'], 'rate_date' => $row['rate_date'], 'source' => $row['source']]);
 		} else {
 			echo json_encode(['success' => false, 'message' => 'No exchange rate found for this date or earlier.']);
 		}

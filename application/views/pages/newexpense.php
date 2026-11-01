@@ -350,7 +350,7 @@
         var normDate = date.replace(/\//g, '-');
 
         // Fetch rate for this date
-        $.getJSON('<?=base_url('getForexRate');?>', {date: normDate}, function(res){
+        $.getJSON('<?=base_url('getForexRate');?>', {date: normDate, partner_id: $('#formPartnerId').val() || ''}, function(res){
           if(res.success){
             forexRate = res.rate;
             var converted = currency === 'rwf' ? amount / res.rate : amount * res.rate;
@@ -359,6 +359,7 @@
             );
             $('#eurConversionDetail').html(
               'Rate on ' + res.rate_date + ': <strong>' + parseFloat(res.rate).toFixed(2) + ' RWF = 1 EUR</strong>'
+              + (res.source === 'partner' ? ' (partner rate)' : ' (shared default rate)')
             );
           } else {
             forexRate = null;
@@ -374,6 +375,8 @@
       $(document).ready(function(){
         // Currency change
         $(document).on('change', '#formCurrency', tryConvert);
+        // Partner change (admins choose the partner, and each partner has its own rates)
+        $(document).on('change', '#formPartnerId', tryConvert);
         // Amount change
         $(document).on('input change', '#formAmount', tryConvert);
         // Date change — flatpickr fires a native change event on the hidden input

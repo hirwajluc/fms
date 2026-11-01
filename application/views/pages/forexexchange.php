@@ -59,8 +59,41 @@
           $earliest   = $stats['earliest'] ?? null;
           $latest_date= $stats['latest']   ?? null;
           $last_rate  = $stats['last_rate'] ?? null;
-          $can_manage_forex = $this->auth_manager->can_manage_forex();
+          $is_default = $forex_scope_value === 'default';
+          $scope_name = htmlspecialchars($forex_scope_name);
           ?>
+
+          <?php if(!$forex_supported): ?>
+          <div class="alert alert-warning" role="alert">
+            <i class="ti ti-alert-triangle me-1"></i>Rates are read only until the database update is applied. All partners keep using these rates for now.
+          </div>
+          <?php else: ?>
+          <!-- Whose rates are shown -->
+          <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body d-flex flex-wrap align-items-center gap-3">
+              <div>
+                <label class="form-label mb-1" for="forexScope">Show rates for</label>
+                <select id="forexScope" class="form-select">
+                  <?php foreach($forex_partners as $p): ?>
+                  <option value="<?=(int)$p['partner_id'];?>" <?=((string)$forex_scope_value === (string)$p['partner_id']) ? 'selected' : '';?>><?=htmlspecialchars($p['name']);?></option>
+                  <?php endforeach; ?>
+                  <option value="default" <?=$is_default ? 'selected' : '';?>>Shared default rates</option>
+                </select>
+              </div>
+              <div class="text-muted small flex-grow-1" style="flex-basis:280px;">
+                <i class="ti ti-info-circle me-1"></i>
+                <?php if(!$is_default): ?>
+                These rates apply only to <strong><?=$scope_name;?></strong>; no other partner is affected.
+                An expense uses the partner's latest rate on or before its date, or the shared default if there is none.
+                <?php elseif($can_edit_rates): ?>
+                Used by any partner with no rate of its own on or before the expense date. Changing one affects all of those partners.
+                <?php else: ?>
+                Set by the Super Admin and read only here. Your expenses use these until your institution has a rate of its own on or before the expense date.
+                <?php endif; ?>
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
 
           <!-- Stats row -->
           <div class="row g-4 mb-4">
@@ -121,7 +154,8 @@
           <!-- Table card -->
           <div class="card border-0 shadow-sm">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <h5 class="mb-0"><i class="ti ti-table me-1"></i> Exchange Rate Records</h5>
+              <h5 class="mb-0"><i class="ti ti-table me-1"></i> Exchange Rate Records: <?=$scope_name;?></h5>
+              <?php if($can_edit_rates): ?>
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRateModal">
                   <i class="ti ti-plus me-1"></i> Add Rate
@@ -130,6 +164,7 @@
                   <i class="ti ti-upload me-1"></i> Upload Excel
                 </button>
               </div>
+              <?php endif; ?>
             </div>
             <div class="table-responsive">
               <table id="forexTable" class="table table-hover align-middle mb-0">
@@ -143,7 +178,9 @@
                     <th>Example conversion</th>
                     <th>Added By</th>
                     <th>Added On</th>
+                    <?php if($can_edit_rates): ?>
                     <th>Action</th>
+                    <?php endif; ?>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,18 +204,18 @@
                     </td>
                     <td><?=htmlspecialchars($r['added_by_name'] ?? '—');?></td>
                     <td class="text-muted small"><?=date('d M Y H:i', strtotime($r['created_at']));?></td>
+                    <?php if($can_edit_rates): ?>
                     <td class="text-nowrap">
                       <button type="button" class="btn btn-sm btn-outline-primary" title="Update this rate"
                               onclick="editRate('<?=$r['rate_date'];?>', '<?=(float)$r['rwf_per_eur'];?>')">
                         <i class="ti ti-pencil"></i>
                       </button>
-                      <?php if($can_manage_forex): ?>
-                      <button type="button" class="btn btn-sm btn-outline-danger"
+                      <button type="button" class="btn btn-sm btn-outline-danger" title="Delete this rate"
                               onclick="confirmDelete(<?=$r['id'];?>, '<?=date('d M Y', strtotime($r['rate_date']));?>')">
                         <i class="ti ti-trash"></i>
                       </button>
-                      <?php endif; ?>
                     </td>
+                    <?php endif; ?>
                   </tr>
                   <?php endforeach; ?>
                   <?php endif; ?>
@@ -204,6 +241,7 @@
 <div class="layout-overlay layout-menu-toggle"></div>
 <div class="drag-target"></div>
 
+<?php if($can_edit_rates): ?>
 <!-- ── Add Single Rate Modal ──────────────────────────────────────── -->
 <div class="modal fade" id="addRateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -213,12 +251,14 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form action="<?=base_url('saveForexRate');?>" method="POST">
+        <input type="hidden" name="scope" value="<?=$forex_scope_value;?>" />
         <div class="modal-body">
           <div class="alert alert-info py-2 small mb-3">
             <i class="ti ti-info-circle me-1"></i>
-            Enter the rate for that day in either direction (from BNR or your source).
+            Saving for: <strong><?=$scope_name;?></strong>.
+            Enter the rate for that day in either direction (from BNR, your forex bureau or another source).
             The other direction is worked out automatically.
-            If a rate already exists for the date it will be updated.
+            If this set already has a rate for the date it will be updated.
           </div>
           <div class="mb-3">
             <label class="form-label" for="rate_date">Date <span class="text-danger">*</span></label>
@@ -262,10 +302,11 @@
       <div class="modal-body">
         <div class="alert alert-info py-2 small mb-3">
           <i class="ti ti-info-circle me-1"></i>
+          Saving for: <strong><?=$scope_name;?></strong>.
           The file must have <strong>Column A = Date</strong> and <strong>Column B = Rate</strong>
           in the direction selected below.
           Row 1 is the header and is skipped automatically.
-          Dates that already have a rate are updated.
+          Dates that already have a rate in this set are updated.
         </div>
         <div class="mb-3">
           <label class="form-label" for="upload_direction">Rates in this file are <span class="text-danger">*</span></label>
@@ -295,7 +336,6 @@
   </div>
 </div>
 
-<?php if($can_manage_forex): ?>
 <!-- ── Delete confirmation modal ──────────────────────────────────── -->
 <div class="modal fade" id="deleteRateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -335,10 +375,15 @@ $(function(){
   $('#forexTable').DataTable({
     order: [[1, 'desc']],
     pageLength: 25,
-    columnDefs: [{ targets: [0, 8], orderable: false }],
-    language: { emptyTable: 'No exchange rates recorded yet.' }
+    columnDefs: [{ targets: <?=$can_edit_rates ? '[0, 8]' : '[0]';?>, orderable: false }],
+    language: { emptyTable: <?=$is_default ? "'No exchange rates recorded yet.'" : "'No rates of its own yet: the shared default rates are being used.'";?> }
   });
 
+  $('#forexScope').on('change', function(){
+    location.href = '<?=base_url('forexExchange');?>?scope=' + $(this).val();
+  });
+
+<?php if($can_edit_rates): ?>
   // Add / Update modal: the rate can be entered in either direction
   function refreshRateModal(){
     var toRwf = $('#rate_direction').val() === 'eur_to_rwf';
@@ -381,6 +426,7 @@ $(function(){
     var fd = new FormData();
     fd.append('forex_file', file);
     fd.append('direction', $('#upload_direction').val());
+    fd.append('scope', '<?=$forex_scope_value;?>');
 
     $.ajax({
       url:         '<?=base_url('uploadForexExcel');?>',
@@ -405,9 +451,11 @@ $(function(){
       }
     });
   });
+<?php endif; ?>
 
 });
 
+<?php if($can_edit_rates): ?>
 function editRate(date, rate){
   $('#rate_date').val(date);
   $('#rate_direction').val('eur_to_rwf');
@@ -415,7 +463,6 @@ function editRate(date, rate){
   new bootstrap.Modal(document.getElementById('addRateModal')).show();
 }
 
-<?php if($can_manage_forex): ?>
 function confirmDelete(id, dateLabel){
   document.getElementById('deleteDateLabel').textContent  = dateLabel;
   document.getElementById('confirmDeleteLink').href = '<?=base_url('deleteForexRate');?>/' + id;

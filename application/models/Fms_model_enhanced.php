@@ -251,7 +251,7 @@ class Fms_model_enhanced extends CI_Model{
             partners.name AS partner_name,
             users.email AS uploaded_by_email,
             approver.email AS approved_by_email,
-            (SELECT rwf_per_eur FROM forex_rates WHERE rate_date <= expenses.Date ORDER BY rate_date DESC LIMIT 1) AS forex_rate', FALSE)
+            ' . $this->expense_forex_rate_sql(), FALSE)
             ->join('partners', 'partners.partner_id=expenses.partner_id', 'left')
             ->join('users', 'users.user_id=expenses.uploaded_by', 'left')
             ->join('users AS approver', 'approver.user_id=expenses.approved_by', 'left');
@@ -276,7 +276,7 @@ class Fms_model_enhanced extends CI_Model{
 
     public function get_expenses_for_report($from_date, $to_date, $partner_id = NULL, $status = NULL){
         $this->db->select('expenses.*, partners.name as Partner,
-            (SELECT rwf_per_eur FROM forex_rates WHERE rate_date <= expenses.Date ORDER BY rate_date DESC LIMIT 1) AS forex_rate', FALSE);
+            ' . $this->expense_forex_rate_sql(), FALSE);
         $this->db->from('expenses');
         $this->db->join('partners', 'expenses.partner_id = partners.partner_id', 'left');
         $this->db->where('expenses.Date >=', $from_date);
@@ -1502,50 +1502,116 @@ class Fms_model_enhanced extends CI_Model{
     // ============================================
     // FOREX EXCHANGE RATES
     // ============================================
+    // Each partner keeps its own rates. Rows with partner_id NULL are the shared
+    // default rates, used by a partner until it has a rate of its own.
 
-    public function get_all_forex_rates(){
+    private $forex_partner_supported = NULL;
+
+    /**
+     * forex_rates.partner_id is added by db/database_update.sql, which is applied
+     * manually. Until then there is one shared set of rates, and it is read only.
+     */
+    public function forex_partner_rates_supported(){
+        if($this->forex_partner_supported === NULL){
+            $this->forex_partner_supported = $this->db->field_exists('partner_id', 'forex_rates');
+        }
+        return $this->forex_partner_supported;
+    }
+
+    /** WHERE condition for one partner's rates, or the shared default rates (NULL) */
+    private function forex_scope_sql($partner_id, $column = 'partner_id'){
+        if(!$this->forex_partner_rates_supported()){
+            return '1=1';
+        }
+        return $partner_id ? $column . ' = ' . (int)$partner_id : $column . ' IS NULL';
+    }
+
+    /**
+     * SELECT column for the rate that converts an expense: its partner's latest own
+     * rate on or before the expense date, otherwise the latest shared default rate.
+     */
+    private function expense_forex_rate_sql(){
+        if(!$this->forex_partner_rates_supported()){
+            return '(SELECT rwf_per_eur FROM forex_rates WHERE rate_date <= expenses.Date ORDER BY rate_date DESC LIMIT 1) AS forex_rate';
+        }
+        return 'COALESCE(
+                (SELECT own.rwf_per_eur FROM forex_rates own WHERE own.partner_id = expenses.partner_id AND own.rate_date <= expenses.Date ORDER BY own.rate_date DESC LIMIT 1),
+                (SELECT def.rwf_per_eur FROM forex_rates def WHERE def.partner_id IS NULL AND def.rate_date <= expenses.Date ORDER BY def.rate_date DESC LIMIT 1)
+            ) AS forex_rate';
+    }
+
+    public function get_all_forex_rates($partner_id = NULL){
         return $this->db->query("
             SELECT f.*, CONCAT(u.first_name,' ',u.last_name) AS added_by_name
             FROM forex_rates f
             LEFT JOIN users u2 ON u2.user_id = f.created_by
             LEFT JOIN staff u ON u.staff_id = u2.staff_id
+            WHERE " . $this->forex_scope_sql($partner_id, 'f.partner_id') . "
             ORDER BY f.rate_date DESC
         ")->result_array();
     }
 
-    public function get_forex_rate_by_date($date){
+    public function get_forex_rate_by_id($id){
+        return $this->db->query("SELECT * FROM forex_rates WHERE id=?", [(int)$id])->row_array();
+    }
+
+    public function get_forex_rate_by_date($date, $partner_id = NULL){
         return $this->db->query(
-            "SELECT * FROM forex_rates WHERE rate_date = ?",
+            "SELECT * FROM forex_rates WHERE rate_date = ? AND " . $this->forex_scope_sql($partner_id),
             [$date]
         )->row_array();
     }
 
-    public function save_forex_rate($date, $rate, $user_id){
-        $existing = $this->get_forex_rate_by_date($date);
+    /**
+     * The rate that applies to a partner on a date (see expense_forex_rate_sql).
+     * 'source' says whether it is the partner's own rate or the shared default.
+     */
+    public function find_forex_rate($date, $partner_id = NULL){
+        if($partner_id && $this->forex_partner_rates_supported()){
+            $own = $this->db->query(
+                "SELECT rwf_per_eur, rate_date FROM forex_rates WHERE " . $this->forex_scope_sql($partner_id) . " AND rate_date <= ? ORDER BY rate_date DESC LIMIT 1",
+                [$date]
+            )->row_array();
+            if($own){
+                $own['source'] = 'partner';
+                return $own;
+            }
+        }
+        $default = $this->db->query(
+            "SELECT rwf_per_eur, rate_date FROM forex_rates WHERE " . $this->forex_scope_sql(NULL) . " AND rate_date <= ? ORDER BY rate_date DESC LIMIT 1",
+            [$date]
+        )->row_array();
+        if($default){
+            $default['source'] = 'default';
+        }
+        return $default;
+    }
+
+    public function save_forex_rate($date, $rate, $user_id, $partner_id = NULL){
+        $existing = $this->get_forex_rate_by_date($date, $partner_id);
         if($existing){
             return $this->db->query(
-                "UPDATE forex_rates SET rwf_per_eur=?, created_by=?, created_at=NOW() WHERE rate_date=?",
+                "UPDATE forex_rates SET rwf_per_eur=?, created_by=?, created_at=NOW() WHERE rate_date=? AND " . $this->forex_scope_sql($partner_id),
                 [(float)$rate, (int)$user_id, $date]
             );
         }
         return $this->db->query(
-            "INSERT INTO forex_rates (rate_date, rwf_per_eur, created_by) VALUES (?,?,?)",
-            [$date, (float)$rate, (int)$user_id]
+            "INSERT INTO forex_rates (partner_id, rate_date, rwf_per_eur, created_by) VALUES (?,?,?,?)",
+            [$partner_id ?: NULL, $date, (float)$rate, (int)$user_id]
         );
     }
 
-    public function bulk_save_forex_rates($rows, $user_id){
+    public function bulk_save_forex_rates($rows, $user_id, $partner_id = NULL){
         $inserted = 0; $updated = 0; $errors = [];
         foreach($rows as $row){
             $date = $row['date'];
             $rate = $row['rate'];
             if(!$date || !is_numeric($rate) || $rate <= 0){ $errors[] = $date ?: '(empty date)'; continue; }
-            $existing = $this->get_forex_rate_by_date($date);
+            $existing = $this->get_forex_rate_by_date($date, $partner_id);
+            $this->save_forex_rate($date, $rate, $user_id, $partner_id);
             if($existing){
-                $this->db->query("UPDATE forex_rates SET rwf_per_eur=?, created_by=?, created_at=NOW() WHERE rate_date=?", [(float)$rate, (int)$user_id, $date]);
                 $updated++;
             } else {
-                $this->db->query("INSERT INTO forex_rates (rate_date, rwf_per_eur, created_by) VALUES (?,?,?)", [$date, (float)$rate, (int)$user_id]);
                 $inserted++;
             }
         }
@@ -1556,13 +1622,15 @@ class Fms_model_enhanced extends CI_Model{
         return $this->db->query("DELETE FROM forex_rates WHERE id=?", [(int)$id]);
     }
 
-    public function get_forex_stats(){
+    public function get_forex_stats($partner_id = NULL){
+        $scope = $this->forex_scope_sql($partner_id);
         $row = $this->db->query("
             SELECT COUNT(*) AS total,
                    MIN(rate_date) AS earliest,
                    MAX(rate_date) AS latest,
-                   (SELECT rwf_per_eur FROM forex_rates ORDER BY rate_date DESC LIMIT 1) AS last_rate
+                   (SELECT rwf_per_eur FROM forex_rates WHERE " . $scope . " ORDER BY rate_date DESC LIMIT 1) AS last_rate
             FROM forex_rates
+            WHERE " . $scope . "
         ")->row_array();
         return $row;
     }

@@ -126,18 +126,21 @@ class Auth_manager {
     }
 
     /**
-     * Check if user can access the Forex module (view, add and update rates)
+     * Check if user can access the Forex module
      */
     public function can_access_forex(){
         return $this->is_super_admin() || $this->is_coordinator();
     }
 
     /**
-     * Check if user can delete Forex rates.
-     * Rates are shared by all partners, so this stays with Super Admin.
+     * Check if user can add, update or delete one partner's Forex rates
+     * (NULL = the shared default rates, which only a Super Admin can change)
      */
-    public function can_manage_forex(){
-        return $this->is_super_admin();
+    public function can_edit_forex_rates($partner_id){
+        if($this->is_super_admin()){
+            return TRUE;
+        }
+        return $this->is_coordinator() && !empty($partner_id) && $this->can_access_partner($partner_id);
     }
 
     /**

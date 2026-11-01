@@ -5,9 +5,11 @@
 --
 -- WHAT THIS IS
 --   Part 1  SCHEMA: every table, index, AUTO_INCREMENT and foreign key from the
---           export, plus the one new column users.email_notifications_enabled.
+--           export, plus users.email_notifications_enabled and forex_rates.partner_id
+--           (each partner keeps its own rates; NULL marks a shared default rate).
 --   Part 2  REFERENCE DATA: roles, work_packages, partners (contact details
---           removed), system_settings (signature entries removed), forex_rates.
+--           removed), system_settings (signature entries removed), forex_rates
+--           (all of them shared default rates, as partner_id is not set).
 --
 -- WHAT THIS IS NOT
 --   It is not a backup and contains NO user data. Rows were deliberately left out
@@ -79,6 +81,7 @@ CREATE TABLE `expenses` (
 -- Table structure for table `forex_rates`
 CREATE TABLE `forex_rates` (
   `id` int NOT NULL,
+  `partner_id` int DEFAULT NULL COMMENT 'NULL = shared default rate, otherwise the partner that owns this rate',
   `rate_date` date NOT NULL,
   `rwf_per_eur` decimal(10,4) NOT NULL COMMENT '1 EUR = X RWF',
   `created_by` int DEFAULT NULL,
@@ -424,7 +427,7 @@ ALTER TABLE `expenses`
 
 ALTER TABLE `forex_rates`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `unique_date` (`rate_date`),
+  ADD UNIQUE KEY `unique_partner_date` (`partner_id`,`rate_date`),
   ADD KEY `idx_rate_date` (`rate_date`);
 
 ALTER TABLE `monthly_financial_reports`
@@ -642,6 +645,9 @@ ALTER TABLE `expenses`
   ADD CONSTRAINT `expenses_ibfk_1` FOREIGN KEY (`partner_id`) REFERENCES `partners` (`partner_id`) ON DELETE SET NULL,
   ADD CONSTRAINT `expenses_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL,
   ADD CONSTRAINT `expenses_ibfk_3` FOREIGN KEY (`approved_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL;
+
+ALTER TABLE `forex_rates`
+  ADD CONSTRAINT `forex_rates_ibfk_1` FOREIGN KEY (`partner_id`) REFERENCES `partners` (`partner_id`) ON DELETE CASCADE;
 
 ALTER TABLE `monthly_financial_reports`
   ADD CONSTRAINT `monthly_financial_reports_ibfk_1` FOREIGN KEY (`partner_id`) REFERENCES `partners` (`partner_id`),
