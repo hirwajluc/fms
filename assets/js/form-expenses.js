@@ -100,8 +100,13 @@ document.addEventListener('DOMContentLoaded', function (e) {
               message: 'Please enter Amount'
             },
             regexp: {
-              regexp: /^[0-9]+$/,
-              message: 'The Amount can only consist of numbers'
+              regexp: /^\d*(\.\d{1,2})?$/,
+              message: 'Enter the amount with up to 2 decimals, for example 1250.50'
+            },
+            greaterThan: {
+              min: 0,
+              inclusive: false,
+              message: 'The amount must be more than 0'
             }
           }
         },

@@ -1302,7 +1302,7 @@ class Fms extends CI_Controller {
 			'Category' => $category,
             'WorkPackage' => $work_package,
             'Currency' => $currency,  // Already mapped to proper code (RWF, EUR, USD)
-            'Amount' => floatval($amount),
+            'Amount' => round(floatval($amount), 2),
             'ShortDescription' => $description,
             'Date' => $date,
 			'uploaded_by' => $this->session->userdata('fms_user_id'),
