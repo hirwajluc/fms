@@ -13,6 +13,9 @@ system/logs/*
 # Generated report PDFs (large, regenerated on demand)
 assets/reports/*.pdf
 
+# Backups written on the server by the RP data cleanup (rows and files)
+application/backups/
+
 # Uploaded user files (managed outside git)
 assets/uploads/*
 !assets/uploads/.gitkeep

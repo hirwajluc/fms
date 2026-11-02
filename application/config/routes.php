@@ -106,6 +106,11 @@ $route['profile']         = 'fms/profile';
 $route['updateProfile']   = 'fms/updateProfile';
 $route['updatePassword']  = 'fms/updatePassword';
 
+// RP data cleanup (one-off, Super Admin only; remove with Rp_cleanup.php after use)
+$route['rpCleanup']                  = 'rp_cleanup/index';
+$route['rpCleanup/execute']          = 'rp_cleanup/execute';
+$route['rpCleanup/backup/(:any)']    = 'rp_cleanup/backup/$1';
+
 // User settings routes
 $route['settings']                     = 'fms/settings';
 $route['updateNotificationPreference'] = 'fms/updateNotificationPreference';

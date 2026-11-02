@@ -164,11 +164,10 @@
                   </div>
                 </div>
 
-                <div class="card-datatable table-responsive">
-                  <table class="dt-responsive table" id="expensesTable">
+                <div class="card-datatable">
+                  <table class="table text-nowrap" id="expensesTable">
                     <thead>
                       <tr>
-                        <th></th>
                         <th>File Name</th>
 						<th>Partner</th>
 						<th>Date</th>
@@ -217,7 +216,6 @@
 									}
 						?>
 						<tr>
-							<td></td>
 							<td>
 								<?php if(strtolower($file_extension) == 'pdf'): ?>
 								<a href="javascript:void(0)" onclick="viewPDF('<?=$file_path;?>', '<?=$expense['FileName'];?>')">
@@ -250,7 +248,7 @@
 							<td><?=ucfirst($expense['Category']);?></td>
 							<td><?=$wp_display;?></td>
 							<td><?=date('M d, Y', strtotime($expense['created_at']));?></td>
-							<td><small><?=$expense['ShortDescription'];?></small></td>
+							<td class="text-wrap" style="min-width:220px;"><small><?=$expense['ShortDescription'];?></small></td>
 							<td><span class="badge <?=$status_badge;?>"><?=ucfirst($expense['status']);?></span></td>
 							<td>
 								<div class="btn-group" role="group">
@@ -429,7 +427,7 @@
     // Date range custom filter (registered before DataTable init)
     $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
       if (settings.nTable.id !== 'expensesTable') return true;
-      var COL_DATE = 3; // "Apr 14, 2025"
+      var COL_DATE = 2; // "Apr 14, 2025"
       var fromVal = $('#expDateFrom').val(); // YYYY-MM-DD from flatpickr
       var toVal   = $('#expDateTo').val();
       if (!fromVal && !toVal) return true;
@@ -452,7 +450,9 @@
       var table = $.fn.dataTable.isDataTable('#expensesTable')
                     ? $('#expensesTable').DataTable()
                     : $('#expensesTable').DataTable({
-                        responsive: true,
+                        // Every column stays visible; the table scrolls sideways when it is wider than the screen
+                        scrollX: true,
+                        order: [], // keep the server's order: newest uploads first
                         pageLength: 25,
                         language: {
                           emptyTable: 'No expenses found.',
@@ -460,10 +460,17 @@
                         }
                       });
 
+      // Column widths are measured when the table is drawn; measure again once the web font
+      // has loaded, or the scrolling header no longer lines up with the rows
+      if(document.fonts && document.fonts.ready){
+        document.fonts.ready.then(function(){ table.columns.adjust(); });
+      }
+      $(window).on('load', function(){ table.columns.adjust(); });
+
       // Column indices
-      var COL_PARTNER = 2;
-      var COL_WP      = 8;
-      var COL_STATUS  = 11;
+      var COL_PARTNER = 1;
+      var COL_WP      = 7;
+      var COL_STATUS  = 10;
 
       // Status quick-filter buttons (fixed — All / Pending / Approved / Rejected)
       $('#expStatusBtns .btn').on('click', function() {
