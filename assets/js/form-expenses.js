@@ -92,34 +92,8 @@ document.addEventListener('DOMContentLoaded', function (e) {
             }
           }
         },
-				formFileName: {
-          validators: {
-            notEmpty: {
-              message: 'Please enter the File Name'
-            },
-            stringLength: {
-              min: 6,
-              max: 30,
-              message: 'The name must be more than 6 and less than 30 characters long'
-            }
-          }
-        },
-				formPartner: {
-          validators: {
-            notEmpty: {
-              message: 'Please enter the Partner Name'
-            },
-            stringLength: {
-              min: 6,
-              max: 30,
-              message: 'The name must be more than 6 and less than 30 characters long'
-            },
-            regexp: {
-              regexp: /^[a-zA-Z0-9 ]+$/,
-              message: 'The name can only consist of alphabetical, number and space'
-            }
-          }
-        },
+				// formFileName and formPartner are filled in automatically and cannot be edited
+				// (the server checks the file name), so they are not validated here
 				formAmount: {
           validators: {
             notEmpty: {
@@ -209,6 +183,10 @@ document.addEventListener('DOMContentLoaded', function (e) {
           validators: {
             notEmpty: {
               message: 'Please select the file'
+            },
+            file: {
+              extension: 'pdf,doc,docx,xls,xlsx,jpg,jpeg,png',
+              message: 'Only PDF, Word, Excel, JPG and PNG files can be uploaded'
             }
           }
         },

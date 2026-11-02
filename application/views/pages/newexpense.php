@@ -232,7 +232,8 @@
 
                         <div class="col-md-6">
                           <label for="formValidationFile" class="form-label">File</label>
-                          <input class="form-control" type="file" id="formValidationFile" name="formValidationFile" />
+                          <input class="form-control" type="file" id="formValidationFile" name="formValidationFile"
+                                 accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" />
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="formValidationDate">Date</label>
