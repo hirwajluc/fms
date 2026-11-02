@@ -338,7 +338,7 @@ class Fms extends CI_Controller {
 					$entries[] = array(
 						'date' => $date_formatted,
 						'date_raw' => $date_raw,
-						'hours' => floatval($total_hours),
+						'hours' => round(floatval($total_hours), 2),
 						'work_package' => $work_package,
 						'work_package_code' => $wp_code,
 						'comments' => $comments ? $comments : ''
@@ -464,15 +464,16 @@ class Fms extends CI_Controller {
 			$total_hours = 0;
 			foreach($dates as $index => $date){
 				if(!empty($date) && !empty($hours[$index]) && $hours[$index] > 0){
+					$entry_hours = round((float)$hours[$index], 2);
 					$detail_data = array(
 						'timesheet_id' => $timesheet_id,
 						'date' => $date,
-						'hours' => $hours[$index],
+						'hours' => $entry_hours,
 						'work_package' => $work_packages[$index],
 						'activity_description' => $descriptions[$index]
 					);
 					$this->fmsm_enhanced->save_timesheet_detail($detail_data);
-					$total_hours += $hours[$index];
+					$total_hours += $entry_hours;
 				}
 			}
 
@@ -819,7 +820,7 @@ class Fms extends CI_Controller {
 							<div class="col-md-3">
 								<div class="info-text">
 									<p class="mb-1"><strong>Total Hours:</strong></p>
-									<p style="color: #0066cc; font-weight: 600;">' . number_format($timesheet['total_hours'], 1) . ' hours</p>
+									<p style="color: #0066cc; font-weight: 600;">' . number_format($timesheet['total_hours'], 2) . ' hours</p>
 								</div>
 							</div>
 							<div class="col-md-3">
@@ -861,7 +862,7 @@ class Fms extends CI_Controller {
 				$wp_label = isset($wp_labels[$wp['work_package']]) ? $wp_labels[$wp['work_package']] : $wp['work_package'];
 				$html .= '<tr>
 					<td>' . htmlspecialchars($wp_label) . '</td>
-					<td>' . number_format($wp['total_hours'], 1) . '</td>
+					<td>' . number_format($wp['total_hours'], 2) . '</td>
 				</tr>';
 			}
 		} else {
@@ -872,7 +873,7 @@ class Fms extends CI_Controller {
 							<tfoot>
 								<tr>
 									<th>Total</th>
-									<th>' . number_format($timesheet['total_hours'], 1) . ' hours</th>
+									<th>' . number_format($timesheet['total_hours'], 2) . ' hours</th>
 								</tr>
 							</tfoot>
 						</table>
@@ -901,7 +902,7 @@ class Fms extends CI_Controller {
 				$wp_label = isset($wp_labels[$detail['work_package']]) ? $wp_labels[$detail['work_package']] : $detail['work_package'];
 				$html .= '<tr>
 					<td>' . date('d/m/Y', strtotime($detail['date'])) . '</td>
-					<td>' . number_format($detail['hours'], 1) . '</td>
+					<td>' . number_format($detail['hours'], 2) . '</td>
 					<td>' . htmlspecialchars($wp_label) . '</td>
 					<td>' . htmlspecialchars($detail['activity_description']) . '</td>
 				</tr>';
@@ -1090,7 +1091,7 @@ class Fms extends CI_Controller {
 		// Calculate total hours
 		$total_hours = 0;
 		foreach($entry_hours as $hours){
-			$total_hours += floatval($hours);
+			$total_hours += round(floatval($hours), 2);
 		}
 
 		if($total_hours == 0){
@@ -1120,7 +1121,7 @@ class Fms extends CI_Controller {
 				$detail_data = array(
 					'timesheet_id' => $timesheet_id,
 					'date' => date('Y-m-d', strtotime($entry_dates[$i])),
-					'hours' => floatval($entry_hours[$i]),
+					'hours' => round(floatval($entry_hours[$i]), 2),
 					'work_package' => $entry_work_packages[$i],
 					'activity_description' => $entry_descriptions[$i]
 				);
@@ -1756,7 +1757,7 @@ class Fms extends CI_Controller {
 		// ── Stat cards ──
 		$html .= '<table class="cards"><tr>';
 		$html .= '<td class="card c-purple"><div class="n">'.count($timesheets).'</div><div class="l">Timesheets</div></td><td class="card-gap"></td>';
-		$html .= '<td class="card c-blue"><div class="n">'.number_format($total_hours,1).'h</div><div class="l">Total Hours</div></td><td class="card-gap"></td>';
+		$html .= '<td class="card c-blue"><div class="n">'.number_format($total_hours,2).'h</div><div class="l">Total Hours</div></td><td class="card-gap"></td>';
 		$html .= '<td class="card c-green"><div class="n">'.$cnt_approved.'</div><div class="l">Approved</div></td><td class="card-gap"></td>';
 		$html .= '<td class="card c-orange"><div class="n">'.$cnt_submitted.'</div><div class="l">Submitted</div></td><td class="card-gap"></td>';
 		$html .= '<td class="card c-red"><div class="n">'.$cnt_rejected.'</div><div class="l">Rejected</div></td>';
@@ -1787,14 +1788,14 @@ class Fms extends CI_Controller {
 			$html .= '<td>'.htmlspecialchars($ts['partner_name'] ?: '—').'</td>';
 			$html .= '<td>'.$period.'</td>';
 			$html .= '<td>'.htmlspecialchars($ts['staff_category'] ?: '—').'</td>';
-			$html .= '<td style="text-align:right;font-weight:700;color:#1976d2;">'.number_format($ts['total_hours'],1).'h</td>';
+			$html .= '<td style="text-align:right;font-weight:700;color:#1976d2;">'.number_format($ts['total_hours'],2).'h</td>';
 			$html .= '<td>'.$submitted.'</td>';
 			$html .= '<td><span class="b '.$bc.'">'.ucfirst($ts['status']).'</span></td>';
 			$html .= '</tr>';
 		}
 		$html .= '</tbody><tfoot><tr>';
 		$html .= '<td colspan="5" style="text-align:right;color:#696cff;">GRAND TOTAL</td>';
-		$html .= '<td style="text-align:right;color:#1976d2;font-size:11px;">'.number_format($total_hours,1).'h</td>';
+		$html .= '<td style="text-align:right;color:#1976d2;font-size:11px;">'.number_format($total_hours,2).'h</td>';
 		$html .= '<td colspan="2"></td></tr></tfoot></table>';
 
 		// ── Hours by Institution breakdown (if multi-partner) ──
@@ -1824,7 +1825,7 @@ class Fms extends CI_Controller {
 			$tfStyle = 'padding:9px 14px;border-top:2px solid #696cff;background:#ededff;font-weight:700;font-size:10px;';
 			$html .= '<tfoot><tr>';
 			$html .= '<td style="'.$tfStyle.'">Grand Total</td>';
-			$html .= '<td style="'.$tfStyle.'text-align:right;color:#1565c0;">'.number_format($total_hours,1).' h</td>';
+			$html .= '<td style="'.$tfStyle.'text-align:right;color:#1565c0;">'.number_format($total_hours,2).' h</td>';
 			$html .= '<td style="'.$tfStyle.'text-align:right;color:#696cff;">100 %</td>';
 			$html .= '</tr></tfoot></table>';
 		}

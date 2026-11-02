@@ -82,7 +82,7 @@ class Fms_mailer {
             $this->_info_table([
                 'Staff Member'   => htmlspecialchars($submitter_name),
                 'Period'         => $period,
-                'Total Hours'    => number_format($timesheet['total_hours'], 1) . ' hrs',
+                'Total Hours'    => number_format($timesheet['total_hours'], 2) . ' hrs',
                 'Staff Category' => htmlspecialchars($timesheet['staff_category'] ?? '—'),
                 'Submitted On'   => date('d M Y, H:i'),
             ]),
@@ -111,7 +111,7 @@ class Fms_mailer {
              Great news! Your timesheet has been <strong style='color:#4CAF50;'>approved</strong>.",
             $this->_info_table([
                 'Period'      => $period,
-                'Total Hours' => number_format($timesheet['total_hours'], 1) . ' hrs',
+                'Total Hours' => number_format($timesheet['total_hours'], 2) . ' hrs',
                 'Status'      => '<span style="color:#4CAF50;font-weight:700;">Approved</span>',
                 'Approved On' => date('d M Y, H:i'),
             ]),
@@ -136,7 +136,7 @@ class Fms_mailer {
              Please review the comments below and resubmit.",
             $this->_info_table([
                 'Period'      => $period,
-                'Total Hours' => number_format($timesheet['total_hours'], 1) . ' hrs',
+                'Total Hours' => number_format($timesheet['total_hours'], 2) . ' hrs',
                 'Status'      => '<span style="color:#e53935;font-weight:700;">Returned for Revision</span>',
                 'Comments'    => '<em>' . htmlspecialchars($reason) . '</em>',
             ]),

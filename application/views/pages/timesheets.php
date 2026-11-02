@@ -210,7 +210,7 @@
 							<td><?=isset($timesheet['partner_name']) ? $timesheet['partner_name'] : 'N/A';?></td>
 							<td><?=$month_name.' '.$timesheet['year'];?></td>
 							<td><?=isset($timesheet['staff_category']) ? $timesheet['staff_category'] : 'N/A';?></td>
-							<td><?=number_format($timesheet['total_hours'], 1);?> hrs</td>
+							<td><?=number_format($timesheet['total_hours'], 2);?> hrs</td>
 							<td><?=!empty($timesheet['submitted_at']) ? date('M d, Y', strtotime($timesheet['submitted_at'])) : 'Not submitted';?></td>
 							<td>
 								<span class="badge <?=$status_badge;?>"><?=ucfirst($timesheet['status']);?></span>

@@ -321,7 +321,8 @@
     <script src="<?=base_url();?>assets/js/main.js"></script>
 
     <!-- Page JS -->
-    <script src="<?=base_url();?>assets/js/form-expenses.js"></script>
+    <!-- Version in the URL so browsers load the new file whenever it changes -->
+    <script src="<?=base_url();?>assets/js/form-expenses.js?v=<?=filemtime(FCPATH . 'assets/js/form-expenses.js');?>"></script>
 
     <!-- Forex live conversion -->
     <script>

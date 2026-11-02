@@ -290,7 +290,7 @@
             <input type="date" name="entry_date[]" class="form-control form-control-sm" required />
           </td>
           <td>
-            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.5" placeholder="0.0" required onchange="calculateTotal()" />
+            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.01" placeholder="0.0" required onchange="calculateTotal()" />
           </td>
           <td>
             <select name="entry_work_package[]" class="form-select form-select-sm" required>
@@ -329,7 +329,7 @@
             <input type="date" name="entry_date[]" class="form-control form-control-sm" value="${date}" required />
           </td>
           <td>
-            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.5" value="${hours}" required onchange="calculateTotal()" />
+            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.01" value="${hours}" required onchange="calculateTotal()" />
           </td>
           <td>
             <select name="entry_work_package[]" class="form-select form-select-sm" required>
@@ -376,7 +376,7 @@
         const value = parseFloat($(this).val()) || 0;
         total += value;
       });
-      $('#totalHours').text(total.toFixed(1));
+      $('#totalHours').text(total.toFixed(2));
     }
 
     // Form validation before submit

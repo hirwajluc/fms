@@ -500,7 +500,7 @@
             <input type="date" name="entry_date[]" class="form-control form-control-sm" required />
           </td>
           <td>
-            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.5" placeholder="0.0" required onchange="calculateTotal()" />
+            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.01" placeholder="0.0" required onchange="calculateTotal()" />
           </td>
           <td>
             <select name="entry_work_package[]" class="form-select form-select-sm" required>
@@ -546,7 +546,7 @@
         const value = parseFloat($(this).val()) || 0;
         total += value;
       });
-      $('#totalHours').text(total.toFixed(1));
+      $('#totalHours').text(total.toFixed(2));
     }
 
     function displayExcelPreview(entries, staffInfo) {
@@ -567,7 +567,7 @@
       });
 
       html += '</tbody>';
-      html += '<tfoot class="table-info"><tr><th>Total</th><th>' + totalHours.toFixed(1) + ' hours</th><th colspan="2"></th></tr></tfoot>';
+      html += '<tfoot class="table-info"><tr><th>Total</th><th>' + totalHours.toFixed(2) + ' hours</th><th colspan="2"></th></tr></tfoot>';
       html += '</table></div>';
 
       if (staffInfo && (staffInfo.name || staffInfo.organization || staffInfo.staff_category)) {

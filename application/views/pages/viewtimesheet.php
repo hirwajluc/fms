@@ -160,7 +160,7 @@
                         </div>
                         <div class="col-md-3">
                           <p class="mb-1"><strong>Total Hours:</strong></p>
-                          <p class="text-primary fw-bold"><?=number_format($timesheet['total_hours'], 1);?> hours</p>
+                          <p class="text-primary fw-bold"><?=number_format($timesheet['total_hours'], 2);?> hours</p>
                         </div>
                         <div class="col-md-3">
                           <p class="mb-1"><strong>Submitted:</strong></p>
@@ -215,7 +215,7 @@
                                   $wp_label = isset($wp_labels[$wp['work_package']]) ? $wp_labels[$wp['work_package']] : $wp['work_package'];
                                   echo '<tr>';
                                   echo '<td>'.$wp_label.'</td>';
-                                  echo '<td>'.number_format($wp['total_hours'], 1).'</td>';
+                                  echo '<td>'.number_format($wp['total_hours'], 2).'</td>';
                                   echo '</tr>';
                                 }
                               } else {
@@ -226,7 +226,7 @@
                           <tfoot class="table-info">
                             <tr>
                               <th>Total</th>
-                              <th><?=number_format($timesheet['total_hours'], 1);?> hours</th>
+                              <th><?=number_format($timesheet['total_hours'], 2);?> hours</th>
                             </tr>
                           </tfoot>
                         </table>
@@ -261,7 +261,7 @@
                                   $wp_label = isset($wp_labels[$detail['work_package']]) ? $wp_labels[$detail['work_package']] : $detail['work_package'];
                                   echo '<tr>';
                                   echo '<td>'.date('d/m/Y', strtotime($detail['date'])).'</td>';
-                                  echo '<td>'.number_format($detail['hours'], 1).'</td>';
+                                  echo '<td>'.number_format($detail['hours'], 2).'</td>';
                                   echo '<td>'.$wp_label.'</td>';
                                   echo '<td>'.$detail['activity_description'].'</td>';
                                   echo '</tr>';
