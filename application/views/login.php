@@ -59,6 +59,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
     <script src="<?=base_url();?>assets/vendor/js/template-customizer.js"></script>
     <!--? Config:  Mandatory theme config file contain global vars & default theme options, Set your preferred theme option in this file.  -->
     <script src="<?=base_url();?>assets/js/config.js"></script>
+    <link rel="stylesheet" href="<?=base_url();?>assets/css/fms-brand.css?v=<?=filemtime(FCPATH . 'assets/css/fms-brand.css');?>" />
   </head>
 
   <body>
@@ -91,9 +92,11 @@ defined('BASEPATH') OR exit('No direct script access allowed');
           <div class="w-px-400 mx-auto">
             <!-- Logo -->
             <div class="app-brand mb-4">
-              <a href="<?=base_url();?>" class="app-brand-link gap-2">
-                <span class="app-brand-logo w-px-400 h-px-100">
-                  <img src="<?=base_url();?>assets/img/branding/GreaterIcon.png">
+              <a href="<?=base_url();?>" class="app-brand-link fms-brand fms-brand-lg">
+                <img src="<?=base_url();?>assets/img/branding/fms-mark.svg" alt="" class="fms-brand-mark" />
+                <span class="fms-brand-text">
+                  <span class="fms-brand-name"><span class="fms-brand-greater">GREATER</span> FMS</span>
+                  <span class="fms-brand-tagline">Financial Management System</span>
                 </span>
               </a>
             </div>
@@ -140,6 +143,10 @@ defined('BASEPATH') OR exit('No direct script access allowed');
               </div>
               <button type="submit" class="btn btn-primary d-grid w-100" id="signInBtn">Sign in</button>
             </form>
+
+            <div class="fms-eu-block">
+              <img src="<?=base_url();?>assets/img/branding/eu-co-funded.png" alt="Co-funded by the European Union" class="fms-eu-logo" />
+            </div>
 
           </div>
         </div>

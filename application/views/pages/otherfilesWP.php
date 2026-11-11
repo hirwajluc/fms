@@ -49,7 +49,7 @@
               <!-- Breadcrumb -->
               <h4 class="fw-bold py-3 mb-4">
                 <span class="text-muted fw-light">
-                  <a href="<?=base_url('otherFiles');?>" class="text-muted">Other Files</a> /
+                  <a href="<?=base_url('otherFiles') . (!empty($partner_filter) ? '?partner=' . $partner_filter : '');?>" class="text-muted">Other Files</a> /
                 </span>
                 <?=$wp['code'];?> – <?=$wp['name'];?>
               </h4>
@@ -81,6 +81,27 @@
                   </button>
                 </div>
               </div>
+
+<?php if($this->auth_manager->is_super_admin()): ?>
+              <!-- Partner filter (Super Admin) -->
+              <?php $partner_total = array_sum(array_column($filter_partners, 'file_count')); ?>
+              <div class="card mb-4">
+                <div class="card-body d-flex flex-wrap align-items-center gap-2 gap-md-3">
+                  <label class="fw-semibold mb-0" for="partnerFilter"><i class="ti ti-filter me-1"></i>Partner</label>
+                  <select id="partnerFilter" class="form-select" style="max-width:380px;" data-url="<?=base_url('otherFilesWP/' . $wp['wp_id']);?>">
+                    <option value="">All partners (<?=(int)$partner_total;?> file<?=($partner_total != 1) ? 's' : '';?>)</option>
+                    <?php foreach($filter_partners as $p): ?>
+                    <option value="<?=(int)$p['partner_id'];?>" <?=($partner_filter === (int)$p['partner_id']) ? 'selected' : '';?>>
+                      <?=htmlspecialchars($p['name']);?> (<?=(int)$p['file_count'];?>)
+                    </option>
+                    <?php endforeach; ?>
+                  </select>
+                  <?php if($partner_filter): ?>
+                  <a href="<?=base_url('otherFilesWP/' . $wp['wp_id']);?>" class="small"><i class="ti ti-x me-1"></i>Show all partners</a>
+                  <?php endif; ?>
+                </div>
+              </div>
+              <?php endif; ?>
 
               <!-- Files table -->
               <div class="card">
@@ -443,6 +464,16 @@
     <script src="<?=base_url();?>assets/vendor/js/menu.js"></script>
     <script src="<?=base_url();?>assets/vendor/libs/datatables-bs5/datatables-bootstrap5.js"></script>
     <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script>
+    // Partner filter: reload the page for the chosen partner
+    (function(){
+      var select = document.getElementById('partnerFilter');
+      if(!select){ return; }
+      select.addEventListener('change', function(){
+        window.location.href = select.dataset.url + (select.value ? '?partner=' + encodeURIComponent(select.value) : '');
+      });
+    })();
+    </script>
 
     <script>
     $(function(){
@@ -456,7 +487,7 @@
           emptyTable:
             '<div class="text-center py-4 text-muted">' +
             '<i class="ti ti-folder-open fs-1 d-block mb-2 opacity-50"></i>' +
-            'No files uploaded yet in this Work Package.<br>' +
+            <?=!empty($partner_filter) ? "'No files from this partner in this Work Package.<br>' +" : "'No files uploaded yet in this Work Package.<br>' +";?>
             '<button type="button" class="btn btn-sm btn-primary mt-3" ' +
             'data-bs-toggle="modal" data-bs-target="#uploadModal">' +
             '<i class="ti ti-upload me-1"></i> Upload the first file</button></div>',

@@ -1287,6 +1287,18 @@ class Fms_model_enhanced extends CI_Model{
      * - Coordinator  → only files uploaded by anyone at their partner
      * - Filter by uploaded_by to restrict to own uploads
      */
+    /** Every partner with its number of work package files (in one WP, or across all of them) */
+    public function get_partners_with_file_counts($wp_id = NULL){
+        $wp_join = $wp_id ? ' AND ofl.wp_id = ' . (int)$wp_id : '';
+        return $this->db->query("
+            SELECT p.partner_id, p.name, p.short_name, COUNT(ofl.file_id) AS file_count
+            FROM partners p
+            LEFT JOIN other_files ofl ON ofl.partner_id = p.partner_id{$wp_join}
+            GROUP BY p.partner_id, p.name, p.short_name
+            ORDER BY p.name ASC
+        ")->result_array();
+    }
+
     public function get_files_by_wp($wp_id, $partner_id = NULL, $uploaded_by = NULL){
         $wp_id  = (int)$wp_id;
         $where  = 'WHERE ofl.wp_id = ' . $wp_id;

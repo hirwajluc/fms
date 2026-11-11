@@ -1,11 +1,13 @@
+<link rel="stylesheet" href="<?=base_url();?>assets/css/fms-brand.css?v=<?=filemtime(FCPATH . 'assets/css/fms-brand.css');?>" />
 <nav class="layout-navbar navbar navbar-expand-xl align-items-center bg-navbar-theme" id="layout-navbar">
           <div class="container-xxl">
             <div class="navbar-brand app-brand d-none d-xl-flex py-0 me-4">
-              <a href="<?=base_url();?>" class="app-brand-link gap-2">
-                <span class="app-brand-logo h-px-40">
-					<img src="<?=base_url();?>assets/img/branding/GreaterIcon.png" width="80px">
+              <a href="<?=base_url();?>" class="app-brand-link fms-brand">
+                <img src="<?=base_url();?>assets/img/branding/fms-mark.svg" alt="" class="fms-brand-mark" />
+                <span class="fms-brand-text">
+                  <span class="fms-brand-name"><span class="fms-brand-greater">GREATER</span> FMS</span>
+                  <span class="fms-brand-tagline">Financial Management System</span>
                 </span>
-                <span class="app-brand-text demo menu-text fw-bold"></span>
               </a>
 
               <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-xl-none">
@@ -22,6 +24,11 @@
             <div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
               <ul class="navbar-nav flex-row align-items-center ms-auto">
                 
+
+                <!-- Co-funded by the European Union -->
+                <li class="nav-item d-flex align-items-center me-2 me-xl-3">
+                  <img src="<?=base_url();?>assets/img/branding/eu-co-funded.png" alt="Co-funded by the European Union" class="fms-eu-logo" />
+                </li>
 
                 <!-- Search -->
                 <li class="nav-item navbar-search-wrapper me-2 me-xl-0">

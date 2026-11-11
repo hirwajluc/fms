@@ -63,6 +63,27 @@
               </div>
               <?php endif; ?>
 
+<?php if($this->auth_manager->is_super_admin()): ?>
+              <!-- Partner filter (Super Admin) -->
+              <?php $partner_total = array_sum(array_column($filter_partners, 'file_count')); ?>
+              <div class="card mb-4">
+                <div class="card-body d-flex flex-wrap align-items-center gap-2 gap-md-3">
+                  <label class="fw-semibold mb-0" for="partnerFilter"><i class="ti ti-filter me-1"></i>Partner</label>
+                  <select id="partnerFilter" class="form-select" style="max-width:380px;" data-url="<?=base_url('otherFiles');?>">
+                    <option value="">All partners (<?=(int)$partner_total;?> file<?=($partner_total != 1) ? 's' : '';?>)</option>
+                    <?php foreach($filter_partners as $p): ?>
+                    <option value="<?=(int)$p['partner_id'];?>" <?=($partner_filter === (int)$p['partner_id']) ? 'selected' : '';?>>
+                      <?=htmlspecialchars($p['name']);?> (<?=(int)$p['file_count'];?>)
+                    </option>
+                    <?php endforeach; ?>
+                  </select>
+                  <?php if($partner_filter): ?>
+                  <a href="<?=base_url('otherFiles');?>" class="small"><i class="ti ti-x me-1"></i>Show all partners</a>
+                  <?php endif; ?>
+                </div>
+              </div>
+              <?php endif; ?>
+
               <!-- WP Folder Cards -->
               <div class="row g-4">
                 <?php
@@ -73,7 +94,7 @@
                   $color = $wp_colors[$i % count($wp_colors)];
                 ?>
                 <div class="col-sm-6 col-xl-3">
-                  <a href="<?=base_url('otherFilesWP/'.$wp['wp_id']);?>" class="text-decoration-none">
+                  <a href="<?=base_url('otherFilesWP/'.$wp['wp_id']) . ($partner_filter ? '?partner=' . $partner_filter : '');?>" class="text-decoration-none">
                     <div class="card h-100 border-0 shadow-sm wp-folder-card">
                       <div class="card-body d-flex flex-column align-items-center text-center p-4">
                         <div class="avatar avatar-xl mb-3">
@@ -129,6 +150,16 @@
     <script src="<?=base_url();?>assets/vendor/libs/node-waves/node-waves.js"></script>
     <script src="<?=base_url();?>assets/vendor/js/menu.js"></script>
     <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script>
+    // Partner filter: reload the page for the chosen partner
+    (function(){
+      var select = document.getElementById('partnerFilter');
+      if(!select){ return; }
+      select.addEventListener('change', function(){
+        window.location.href = select.dataset.url + (select.value ? '?partner=' + encodeURIComponent(select.value) : '');
+      });
+    })();
+    </script>
 
     <style>
     .wp-folder-card { transition: transform .15s, box-shadow .15s; }

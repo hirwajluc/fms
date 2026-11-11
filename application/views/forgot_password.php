@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="<?=base_url();?>assets/vendor/css/pages/page-auth.css" />
   <script src="<?=base_url();?>assets/vendor/js/helpers.js"></script>
   <script src="<?=base_url();?>assets/js/config.js"></script>
+  <link rel="stylesheet" href="<?=base_url();?>assets/css/fms-brand.css?v=<?=filemtime(FCPATH . 'assets/css/fms-brand.css');?>" />
 </head>
 <body>
   <div class="authentication-wrapper authentication-cover authentication-bg">
@@ -44,9 +45,11 @@
 
           <!-- Logo -->
           <div class="app-brand mb-4">
-            <a href="<?=base_url();?>" class="app-brand-link gap-2">
-              <span class="app-brand-logo">
-                <img src="<?=base_url();?>assets/img/branding/GreaterIcon.png" style="max-height:60px;">
+            <a href="<?=base_url();?>" class="app-brand-link fms-brand fms-brand-lg">
+              <img src="<?=base_url();?>assets/img/branding/fms-mark.svg" alt="" class="fms-brand-mark" />
+              <span class="fms-brand-text">
+                <span class="fms-brand-name"><span class="fms-brand-greater">GREATER</span> FMS</span>
+                <span class="fms-brand-tagline">Financial Management System</span>
               </span>
             </a>
           </div>
@@ -83,6 +86,10 @@
             <a href="<?=base_url('login');?>" class="d-flex align-items-center justify-content-center gap-1 small">
               <i class="ti ti-arrow-left"></i> Back to Login
             </a>
+          </div>
+
+          <div class="fms-eu-block">
+            <img src="<?=base_url();?>assets/img/branding/eu-co-funded.png" alt="Co-funded by the European Union" class="fms-eu-logo" />
           </div>
 
         </div>

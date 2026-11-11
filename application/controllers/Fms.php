@@ -3024,14 +3024,30 @@ class Fms extends CI_Controller {
 		$user_id    = $this->session->userdata('fms_user_id');
 		$partner_id = $this->session->userdata('fms_partner_id');
 
+		$this->data['partner_filter']  = NULL;
+		$this->data['filter_partners'] = array();
 		if($this->auth_manager->is_super_admin()){
-			$this->data['work_packages'] = $this->fmsm_enhanced->get_work_packages();
+			$this->data['partner_filter']  = $this->other_files_partner_filter();
+			$this->data['work_packages']   = $this->fmsm_enhanced->get_work_packages($this->data['partner_filter']);
+			$this->data['filter_partners'] = $this->fmsm_enhanced->get_partners_with_file_counts();
 		} else {
 			// Coordinator sees counts for their own partner only
 			$this->data['work_packages'] = $this->fmsm_enhanced->get_work_packages($partner_id);
 		}
 
 		$this->load->view('pages/otherfiles', $this->data);
+	}
+
+	/**
+	 * Super Admin's partner filter on the Other Files pages:
+	 * a valid partner ID from ?partner=, or NULL for all partners.
+	 */
+	private function other_files_partner_filter(){
+		$partner = $this->input->get('partner', TRUE);
+		if(!ctype_digit((string)$partner) || !$this->fmsm_enhanced->get_partner_by_id($partner)){
+			return NULL;
+		}
+		return (int)$partner;
 	}
 
 	/**
@@ -3050,8 +3066,12 @@ class Fms extends CI_Controller {
 		$partner_id = $this->session->userdata('fms_partner_id');
 		$user_id    = $this->session->userdata('fms_user_id');
 
+		$this->data['partner_filter']  = NULL;
+		$this->data['filter_partners'] = array();
 		if($this->auth_manager->is_super_admin()){
-			$files = $this->fmsm_enhanced->get_files_by_wp($wp_id);
+			$this->data['partner_filter']  = $this->other_files_partner_filter();
+			$this->data['filter_partners'] = $this->fmsm_enhanced->get_partners_with_file_counts($wp_id);
+			$files = $this->fmsm_enhanced->get_files_by_wp($wp_id, $this->data['partner_filter']);
 		} else {
 			// Coordinators see only files they uploaded
 			$files = $this->fmsm_enhanced->get_files_by_wp($wp_id, $partner_id, $user_id);

@@ -1,0 +1,58 @@
+/* GREATER FMS brand: logo lockup and the EU co-funding logo */
+.fms-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  text-decoration: none;
+}
+.fms-brand-mark {
+  width: 42px;
+  height: 42px;
+  flex: none;
+}
+.fms-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+.fms-brand-name {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: .01em;
+  color: #103050;
+  white-space: nowrap;
+}
+.fms-brand-greater {
+  color: #00a0e0;
+}
+.fms-brand-tagline {
+  margin-top: .22rem;
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #6f7f92;
+  white-space: nowrap;
+}
+
+/* Larger version for the login pages */
+.fms-brand-lg .fms-brand-mark { width: 64px; height: 64px; }
+.fms-brand-lg .fms-brand-name { font-size: 1.85rem; }
+.fms-brand-lg .fms-brand-tagline { font-size: .74rem; }
+
+/* "Co-funded by the European Union": keep the official artwork undistorted */
+.fms-eu-logo {
+  display: block;
+  height: 38px;
+  width: auto;
+}
+.fms-eu-block {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e9eaf0;
+}
+.fms-eu-block .fms-eu-logo { height: 44px; }
+
+@media (max-width: 767.98px) {
+  .layout-navbar .fms-eu-logo { height: 30px; }
+}
