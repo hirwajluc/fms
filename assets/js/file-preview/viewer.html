@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Loaded in a sandboxed frame (opaque origin): no access to FMS, its cookies or the network.
+     The page that opens it sends the file's bytes with postMessage. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src blob: data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
+<title>Preview</title>
+<!-- Bump ?v= when viewer.js or viewer.css change, so browsers load the new files -->
+<link rel="stylesheet" href="viewer.css?v=2" />
+</head>
+<body>
+<div id="status">Loading preview…</div>
+<div id="output"></div>
+<script src="viewer.js?v=2"></script>
+</body>
+</html>

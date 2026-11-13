@@ -134,7 +134,15 @@
                         <td>
                           <div class="d-flex align-items-center gap-2">
                             <i class="ti ti-file-description text-primary fs-5"></i>
+                            <?php if(!empty($f['latest_version_id'])): ?>
+                            <a href="javascript:void(0)" class="fw-medium"
+                               data-preview-url="<?=base_url('downloadOtherFileVersion/'.$f['latest_version_id']);?>"
+                               data-preview-name="<?=htmlspecialchars($f['display_name'] . ' (v' . $f['latest_version'] . ')', ENT_QUOTES);?>"
+                               data-preview-ext="<?=htmlspecialchars(strtolower(pathinfo((string)$f['latest_stored_name'], PATHINFO_EXTENSION)), ENT_QUOTES);?>"
+                               title="Preview"><?=htmlspecialchars($f['display_name']);?></a>
+                            <?php else: ?>
                             <span class="fw-medium"><?=htmlspecialchars($f['display_name']);?></span>
+                            <?php endif; ?>
                           </div>
                           <?php if(!empty($f['description'])): ?>
                           <div class="text-muted small mt-1"><?=htmlspecialchars($f['description']);?></div>
@@ -150,6 +158,12 @@
                         <td>
                           <div class="btn-group" role="group">
                             <?php if(!empty($f['latest_version_id'])): ?>
+                            <button type="button" class="btn btn-sm btn-success" title="Preview latest"
+                                    data-preview-url="<?=base_url('downloadOtherFileVersion/'.$f['latest_version_id']);?>"
+                                    data-preview-name="<?=htmlspecialchars($f['display_name'] . ' (v' . $f['latest_version'] . ')', ENT_QUOTES);?>"
+                                    data-preview-ext="<?=htmlspecialchars(strtolower(pathinfo((string)$f['latest_stored_name'], PATHINFO_EXTENSION)), ENT_QUOTES);?>">
+                              <i class="ti ti-eye"></i>
+                            </button>
                             <a href="<?=base_url('downloadOtherFileVersion/'.$f['latest_version_id']);?>"
                                class="btn btn-sm btn-primary" title="Download latest">
                               <i class="ti ti-download"></i>
@@ -363,7 +377,7 @@
                     <th>Change Notes</th>
                     <th>Uploaded By</th>
                     <th>Date</th>
-                    <th>Download</th>
+                    <th>Preview / Download</th>
                   </tr>
                 </thead>
                 <tbody id="versionsList"></tbody>
@@ -456,6 +470,24 @@
     </div>
 
     <!-- Vendor JS -->
+    <!-- File preview -->
+    <div class="modal fade" id="filePreviewModal" tabindex="-1" aria-hidden="true"
+         data-viewer="<?=base_url('assets/js/file-preview/viewer.html');?>?v=<?=filemtime(FCPATH . 'assets/js/file-preview/viewer.html');?>">
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title text-truncate" id="filePreviewTitle">Preview</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-0" id="filePreviewBody" style="height:75vh;background:#f4f5fa;"></div>
+          <div class="modal-footer">
+            <a href="#" id="filePreviewDownload" class="btn btn-primary"><i class="ti ti-download me-1"></i> Download</a>
+            <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="<?=base_url();?>assets/vendor/libs/jquery/jquery.js"></script>
     <script src="<?=base_url();?>assets/vendor/libs/popper/popper.js"></script>
     <script src="<?=base_url();?>assets/vendor/js/bootstrap.js"></script>
@@ -464,6 +496,7 @@
     <script src="<?=base_url();?>assets/vendor/js/menu.js"></script>
     <script src="<?=base_url();?>assets/vendor/libs/datatables-bs5/datatables-bootstrap5.js"></script>
     <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script src="<?=base_url();?>assets/js/file-preview.js?v=<?=filemtime(FCPATH . 'assets/js/file-preview.js');?>"></script>
     <script>
     // Partner filter: reload the page for the chosen partner
     (function(){
@@ -654,7 +687,12 @@
                   + '<td class="small">' + esc(v.description || '—') + '</td>'
                   + '<td class="small">' + esc(v.uploader_name || '—') + '</td>'
                   + '<td class="small text-nowrap">' + fmtDate(v.created_at) + '</td>'
-                  + '<td><a href="<?=base_url('downloadOtherFileVersion/');?>' + v.version_id
+                  + '<td class="text-nowrap"><button type="button" class="btn btn-sm btn-success me-1" title="Preview v' + v.version_number + '"'
+                  + ' data-preview-url="<?=base_url('downloadOtherFileVersion/');?>' + v.version_id + '"'
+                  + ' data-preview-name="' + esc(fileName + ' (v' + v.version_number + ')') + '"'
+                  + ' data-preview-ext="' + esc(String(v.stored_name || '').split('.').pop().toLowerCase()) + '">'
+                  + '<i class="ti ti-eye"></i></button>'
+                  + '<a href="<?=base_url('downloadOtherFileVersion/');?>' + v.version_id
                   + '" class="btn btn-sm btn-primary" title="Download v' + v.version_number + '">'
                   + '<i class="ti ti-download"></i></a></td>'
                   + '</tr>';

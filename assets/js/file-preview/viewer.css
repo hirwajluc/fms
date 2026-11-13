@@ -1,0 +1,33 @@
+html, body { margin: 0; background: #f4f5fa; font-family: "Public Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #33303c; }
+#status { padding: 2rem; text-align: center; color: #6f6b7d; }
+#status.error { color: #ea5455; }
+
+/* Word */
+.docx-wrapper { background: #f4f5fa !important; padding: 16px !important; }
+.docx-wrapper > section.docx { box-shadow: 0 2px 10px rgba(47, 43, 61, .12); margin-bottom: 16px !important; }
+
+/* Excel */
+.sheet-tabs { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; background: #fff; border-bottom: 1px solid #e6e6ea; }
+.sheet-tabs button { border: 1px solid #d9dbe3; background: #fff; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; color: #5d596c; }
+.sheet-tabs button.active { background: #7367f0; border-color: #7367f0; color: #fff; }
+.sheet { padding: 8px; overflow: auto; }
+.sheet table { border-collapse: collapse; font-size: 12px; background: #fff; }
+.sheet td { border: 1px solid #dfe3ea; padding: 3px 7px; white-space: nowrap; vertical-align: top; }
+.sheet-note { padding: 6px 10px; font-size: 12px; color: #6f6b7d; }
+
+/* PowerPoint: slides are drawn at full size, then scaled to fit the frame */
+.pptx-deck { display: flex; flex-direction: column; align-items: center; padding: 16px; }
+.pptx-frame { position: relative; flex: none; overflow: hidden; background: #fff; box-shadow: 0 2px 10px rgba(47, 43, 61, .16); }
+.pptx-slide { position: absolute; left: 0; top: 0; overflow: hidden; transform-origin: 0 0; color: #000; line-height: 1.2; font-family: Calibri, Carlito, "Segoe UI", Roboto, Arial, sans-serif; }
+.pptx-label { margin: 6px 0 18px; font-size: 12px; color: #6f6b7d; }
+.pptx-shape { position: absolute; }
+.pptx-geom { position: absolute; left: 0; top: 0; overflow: visible; }
+.pptx-text { position: absolute; inset: 0; display: flex; flex-direction: column; box-sizing: border-box; white-space: pre-wrap; overflow-wrap: break-word; }
+.pptx-p { margin: 0; }
+.pptx-bu { display: inline-block; text-indent: 0; }
+.pptx-clip { position: absolute; inset: 0; overflow: hidden; }
+.pptx-clip img { position: absolute; max-width: none; }
+.pptx-missing { background: repeating-linear-gradient(45deg, #f1f1f4, #f1f1f4 8px, #e7e7ee 8px, #e7e7ee 16px); }
+.pptx-note { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 8px; text-align: center; font-size: 18px; color: #6f6b7d; background: rgba(244, 245, 250, .9); border: 1px dashed #b7b5c3; }
+.pptx-table { border-collapse: collapse; table-layout: fixed; }
+.pptx-table td { box-sizing: border-box; white-space: pre-wrap; overflow-wrap: break-word; }
