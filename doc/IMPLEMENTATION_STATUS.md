@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The GREATER Financial Management System (GREATER FMS) has undergone significant development with multiple features implemented across three major systems:
+The GREATER File Management System (GREATER FMS) has undergone significant development with multiple features implemented across three major systems:
 
 1. **Timesheet Management System** - ✅ Complete
 2. **Expenses Management System** - ✅ Complete (with critical fixes)

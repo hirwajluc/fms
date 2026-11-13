@@ -1848,7 +1848,7 @@ class Fms extends CI_Controller {
 		}
 
 		$html .= '<div class="foot">© '.date('Y').' GREATER — Erasmus+ Programme Project 101083081'
-		       . ' &nbsp;·&nbsp; Generated automatically by the Financial Management System</div>';
+		       . ' &nbsp;·&nbsp; Generated automatically by the File Management System</div>';
 
 		$html .= '</div>'; // end padding wrapper
 		$html .= '</body></html>';
@@ -2010,7 +2010,7 @@ class Fms extends CI_Controller {
 		}
 
 		$html .= '<div class="footer"><p>© '.date('Y').' GREATER - Erasmus+ Programme Project 101083081</p>';
-		$html .= '<p>This report was generated automatically by the Financial Management System</p></div></body></html>';
+		$html .= '<p>This report was generated automatically by the File Management System</p></div></body></html>';
 
 		return $html;
 	}

@@ -49,7 +49,7 @@
               <img src="<?=base_url();?>assets/img/branding/fms-mark.svg" alt="" class="fms-brand-mark" />
               <span class="fms-brand-text">
                 <span class="fms-brand-name"><span class="fms-brand-greater">GREATER</span> FMS</span>
-                <span class="fms-brand-tagline">Financial Management System</span>
+                <span class="fms-brand-tagline">File Management System</span>
               </span>
             </a>
           </div>

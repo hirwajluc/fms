@@ -301,7 +301,7 @@ Test these to confirm everything is working:
 
 ## 🎉 Success!
 
-Your GREATER FMS is now a **fully functional multi-role financial management system**!
+Your GREATER FMS is now a **fully functional multi-role file management system**!
 
 **Current Status:**
 - ✅ Multi-role user system (4 roles)

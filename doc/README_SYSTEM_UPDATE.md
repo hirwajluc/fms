@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-The GREATER FMS (Financial Management System) is a comprehensive web-based application designed to streamline the management of financial records and timesheet files across multiple partner institutions involved in collaborative projects.
+The GREATER FMS (File Management System) is a comprehensive web-based application designed to streamline the management of financial records and timesheet files across multiple partner institutions involved in collaborative projects.
 
 ---
 

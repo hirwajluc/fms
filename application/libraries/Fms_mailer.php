@@ -34,7 +34,7 @@ class Fms_mailer {
             '#4CAF50',
             '✓ Account Created',
             "Hello <strong>" . htmlspecialchars($full_name) . "</strong>,<br><br>
-             Your account has been created on the <strong>GREATER Financial Management System</strong>.
+             Your account has been created on the <strong>GREATER File Management System</strong>.
              Use the temporary password below to log in — you will be asked to set a new password immediately.",
             $this->_info_table([
                 'Full Name'         => htmlspecialchars($full_name),
@@ -566,7 +566,7 @@ class Fms_mailer {
               <div style="font-size:13px;font-weight:700;color:#696cff;
                           letter-spacing:.5px;">GREATER FMS</div>
               <div style="font-size:11px;color:#999;margin-top:4px;line-height:1.6;">
-                Financial Management System &nbsp;·&nbsp; ERASMUS+ GREATER Project<br>
+                File Management System &nbsp;·&nbsp; ERASMUS+ GREATER Project<br>
                 This is an automated notification — please do not reply to this email.
               </div>
             </td>

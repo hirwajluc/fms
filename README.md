@@ -1,4 +1,4 @@
-# GREATER FMS — Financial Management System
+# GREATER FMS — File Management System
 
 A CodeIgniter 3 web application for managing timesheets, expenses, staff, and monthly reports for the ERASMUS+ GREATER project.
 

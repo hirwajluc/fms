@@ -4,7 +4,7 @@ GREATER FMS - CODEBASE EXPLORATION SUMMARY
 
 Date: November 4, 2024
 Project: GREATER - Growing Rwanda Energy Awareness Through highER education
-System: Financial Management System (FMS)
+System: File Management System (FMS)
 Explored By: Claude Code Analysis
 
 ================================================================================

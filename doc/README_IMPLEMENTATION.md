@@ -406,7 +406,7 @@ Before going live:
 
 ## License & Credits
 
-**GREATER FMS** - Financial Management System
+**GREATER FMS** - File Management System
 Developed: November 2024
 Status: Production Ready
 

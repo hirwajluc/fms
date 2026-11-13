@@ -2,7 +2,7 @@
 
 **Date:** November 4, 2024  
 **Project:** GREATER - Growing Rwanda Energy Awareness Through highER education  
-**System:** Financial Management System (FMS)  
+**System:** File Management System (FMS)  
 **Codebase:** CodeIgniter 3.x based system
 
 ---

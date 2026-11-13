@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GREATER Financial Management System has been successfully updated to support a comprehensive multi-role, multi-institution financial and timesheet management platform.
+The GREATER File Management System has been successfully updated to support a comprehensive multi-role, multi-institution financial and timesheet management platform.
 
 ---
 
