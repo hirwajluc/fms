@@ -81,6 +81,44 @@
 
                 </div>
               </div>
+
+              <!-- Signature -->
+              <div class="card border-0 shadow-sm mt-4" id="signature">
+                <div class="card-header">
+                  <h5 class="mb-0"><i class="ti ti-signature me-1"></i> My Signature</h5>
+                </div>
+                <div class="card-body">
+
+                  <div id="signatureFeedback" role="status" aria-live="polite"></div>
+
+                  <p class="text-muted small">
+                    Your signature is added to the timesheets you submit<?=$signs_approvals ? ', and to the timesheets and expenses you approve' : '';?>.
+                    Timesheets you submitted before adding a signature show your current one.
+                  </p>
+
+                  <div class="border rounded p-3 bg-light text-center mb-3">
+                    <img id="signatureImage" src="<?=htmlspecialchars($signature_url, ENT_QUOTES);?>" alt="Your signature"
+                         style="max-height:100px;max-width:100%;" <?=$signature_url ? '' : 'hidden';?> />
+                    <div id="signatureEmpty" class="text-muted small py-3" <?=$signature_url ? 'hidden' : '';?>>
+                      <i class="ti ti-signature-off d-block mb-1" style="font-size:1.5rem;"></i>No signature yet
+                    </div>
+                  </div>
+
+                  <label class="form-label" for="signatureInput">Upload a signature</label>
+                  <input type="file" class="form-control" id="signatureInput" accept="image/png,image/jpeg" />
+                  <div class="form-text">PNG or JPG, up to 2 MB. Sign on white paper and take a clear photo, or use a PNG with a transparent background.</div>
+
+                  <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button type="button" class="btn btn-primary" id="signatureSave" disabled>
+                      <i class="ti ti-device-floppy me-1"></i> Save signature
+                    </button>
+                    <button type="button" class="btn btn-label-danger" id="signatureRemove" <?=$signature_url ? '' : 'hidden';?>>
+                      <i class="ti ti-trash me-1"></i> Remove
+                    </button>
+                  </div>
+
+                </div>
+              </div>
             </div>
           </div>
 
@@ -117,12 +155,12 @@
 <script>
 $(function(){
 
-  function showFeedback(type, icon, message){
+  function showFeedback(type, icon, message, target){
     var $alert = $('<div class="alert alert-dismissible mb-4" role="alert"></div>').addClass('alert-' + type);
     $alert.append($('<i class="ti me-2"></i>').addClass(icon));
     $alert.append(document.createTextNode(message));
     $alert.append('<button type="button" class="btn-close" data-bs-dismiss="alert"></button>');
-    $('#notificationFeedback').empty().append($alert);
+    $(target || '#notificationFeedback').empty().append($alert);
   }
 
   function showStatus(enabled){
@@ -156,6 +194,82 @@ $(function(){
     }).always(function(){
       $toggle.prop('disabled', false);
     });
+  });
+
+  // ── Signature ──
+  var savedSignature = $('#signatureImage').attr('hidden') ? '' : $('#signatureImage').attr('src');
+  var previewUrl = null;
+
+  function showSignature(url){
+    $('#signatureImage').attr('src', url || '').prop('hidden', !url);
+    $('#signatureEmpty').prop('hidden', !!url);
+  }
+
+  function clearPreview(){
+    if(previewUrl){ URL.revokeObjectURL(previewUrl); previewUrl = null; }
+  }
+
+  // Show the chosen image before it is saved
+  $('#signatureInput').on('change', function(){
+    clearPreview();
+    var file = this.files[0];
+    if(!file){ showSignature(savedSignature); $('#signatureSave').prop('disabled', true); return; }
+    if(!/^image\/(png|jpeg)$/.test(file.type)){
+      showFeedback('danger', 'ti-alert-circle', 'Only PNG or JPG images can be used as a signature.', '#signatureFeedback');
+      this.value = ''; showSignature(savedSignature); $('#signatureSave').prop('disabled', true); return;
+    }
+    if(file.size > 2 * 1024 * 1024){
+      showFeedback('danger', 'ti-alert-circle', 'The image is too large (max 2 MB).', '#signatureFeedback');
+      this.value = ''; showSignature(savedSignature); $('#signatureSave').prop('disabled', true); return;
+    }
+    previewUrl = URL.createObjectURL(file);
+    showSignature(previewUrl);
+    $('#signatureFeedback').empty();
+    $('#signatureSave').prop('disabled', false);
+  });
+
+  function sendSignature(formData, $button){
+    $button.prop('disabled', true);
+    $.ajax({
+      url:         '<?=base_url('updateMySignature');?>',
+      type:        'POST',
+      data:        formData,
+      processData: false,
+      contentType: false,
+      dataType:    'json',
+      headers:     {'X-Requested-With': 'XMLHttpRequest'}
+    }).done(function(res){
+      if(!res.success){
+        showFeedback('danger', 'ti-alert-circle', res.message, '#signatureFeedback');
+        return;
+      }
+      clearPreview();
+      $('#signatureInput').val('');
+      $('#signatureSave').prop('disabled', true);
+      savedSignature = res.removed ? '' : res.preview_url;
+      showSignature(savedSignature);
+      $('#signatureRemove').prop('hidden', !savedSignature);
+      showFeedback('success', 'ti-circle-check', res.message, '#signatureFeedback');
+    }).fail(function(){
+      showFeedback('danger', 'ti-alert-circle', 'Could not save your signature. Please try again.', '#signatureFeedback');
+    }).always(function(){
+      $button.prop('disabled', $button.is('#signatureSave') && !$('#signatureInput').val());
+    });
+  }
+
+  $('#signatureSave').on('click', function(){
+    var file = $('#signatureInput')[0].files[0];
+    if(!file){ return; }
+    var formData = new FormData();
+    formData.append('signature', file);
+    sendSignature(formData, $(this));
+  });
+
+  $('#signatureRemove').on('click', function(){
+    if(!confirm('Remove your signature? Timesheets you submit from now on will not be signed.')){ return; }
+    var formData = new FormData();
+    formData.append('remove', '1');
+    sendSignature(formData, $(this));
   });
 
 });

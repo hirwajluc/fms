@@ -106,15 +106,6 @@
                     <a href="<?=base_url();?>downloadTimesheetPDF/<?=$timesheet['timesheet_id'];?>" class="btn btn-info">
                       <i class="ti ti-download me-1"></i> Download PDF
                     </a>
-                    <?php if(empty($timesheet['signature_image'])): ?>
-                      <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#signatureModal">
-                        <i class="ti ti-signature me-1"></i> Add Signature
-                      </button>
-                    <?php else: ?>
-                      <button type="button" class="btn btn-success" disabled>
-                        <i class="ti ti-check me-1"></i> Signed
-                      </button>
-                    <?php endif; ?>
                   <?php endif; ?>
                   <a href="<?=base_url();?>timesheets" class="btn btn-secondary">
                     <i class="ti ti-arrow-left me-1"></i> Back to List
@@ -278,6 +269,35 @@
                 </div>
               </div>
 
+              <!-- Staff signature (set by each user in Settings) -->
+              <div class="row mt-4">
+                <div class="col-md-12">
+                  <div class="card">
+                    <div class="card-header">
+                      <h5 class="mb-0"><i class="ti ti-signature me-1"></i> Staff Signature</h5>
+                    </div>
+                    <div class="card-body">
+                      <?php if($has_staff_signature): ?>
+                        <img src="<?=base_url('timesheetSignature/' . (int)$timesheet['timesheet_id']);?>"
+                             alt="Signature of <?=htmlspecialchars($timesheet['first_name'].' '.$timesheet['last_name'], ENT_QUOTES);?>"
+                             style="max-height:100px;max-width:100%;" />
+                        <p class="mb-0 mt-2 small text-muted">
+                          Signed by <?=htmlspecialchars($timesheet['first_name'].' '.$timesheet['last_name']);?><?php
+                          if(!empty($timesheet['signature_date'])) echo ' on ' . date('F j, Y', strtotime($timesheet['signature_date'])); ?>
+                        </p>
+                      <?php elseif($is_own_timesheet): ?>
+                        <p class="mb-2 text-muted">This timesheet is not signed yet. Add your signature in Settings and it will appear here and on the PDF.</p>
+                        <a href="<?=base_url('settings');?>#signature" class="btn btn-sm btn-primary">
+                          <i class="ti ti-signature me-1"></i> Add my signature
+                        </a>
+                      <?php else: ?>
+                        <p class="mb-0 text-muted">Not signed: this staff member has not added a signature yet.</p>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
             <!--/ Content -->
 
@@ -314,37 +334,6 @@
 
     <!--/ Layout wrapper -->
 
-    <!-- Signature Modal -->
-    <div class="modal fade" id="signatureModal" tabindex="-1" aria-labelledby="signatureModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="signatureModalLabel">Add Signature to Timesheet</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Upload Signature Image</label>
-              <input type="file" id="signatureFile" class="form-control" accept="image/*" />
-              <small class="text-muted d-block mt-2">
-                <i class="ti ti-info-circle"></i> Accepted formats: JPG, PNG, GIF (Max 5MB)
-              </small>
-            </div>
-            <div id="signaturePreview" class="mb-3" style="display: none; text-align: center;">
-              <p><strong>Preview:</strong></p>
-              <img id="previewImage" src="" alt="Signature Preview" style="max-width: 300px; max-height: 200px; border: 1px solid #ddd; padding: 10px;" />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="uploadSignature()">
-              <i class="ti ti-upload me-1"></i> Upload Signature
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Core JS -->
     <script src="<?=base_url();?>assets/vendor/libs/jquery/jquery.js"></script>
     <script src="<?=base_url();?>assets/vendor/libs/popper/popper.js"></script>
@@ -359,86 +348,6 @@
     <!-- Main JS -->
     <script src="<?=base_url();?>assets/js/main.js"></script>
 
-    <!-- Signature Upload Script -->
-    <script>
-      // Preview signature image before upload
-      document.getElementById('signatureFile').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-          // Validate file size (max 5MB)
-          if (file.size > 5 * 1024 * 1024) {
-            alert('File size exceeds 5MB limit');
-            e.target.value = '';
-            return;
-          }
-
-          // Validate file type
-          const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-          if (!validTypes.includes(file.type)) {
-            alert('Please upload a valid image file (JPG, PNG, or GIF)');
-            e.target.value = '';
-            return;
-          }
-
-          // Show preview
-          const reader = new FileReader();
-          reader.onload = function(event) {
-            document.getElementById('previewImage').src = event.target.result;
-            document.getElementById('signaturePreview').style.display = 'block';
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-
-      function uploadSignature() {
-        const fileInput = document.getElementById('signatureFile');
-        const file = fileInput.files[0];
-
-        if (!file) {
-          alert('Please select a signature image first');
-          return;
-        }
-
-        const formData = new FormData();
-        formData.append('signature_image', file);
-        formData.append('timesheet_id', '<?=$timesheet['timesheet_id'];?>');
-
-        // Show loading state
-        const uploadBtn = event.target;
-        const originalText = uploadBtn.innerHTML;
-        uploadBtn.disabled = true;
-        uploadBtn.innerHTML = '<i class="ti ti-loader-2 me-1"></i> Uploading...';
-
-        $.ajax({
-          url: '<?=base_url();?>uploadTimesheetSignature',
-          type: 'POST',
-          data: formData,
-          processData: false,
-          contentType: false,
-          success: function(response) {
-            if (response.success) {
-              alert('Signature uploaded successfully');
-              // Close modal and reload page
-              const modal = bootstrap.Modal.getInstance(document.getElementById('signatureModal'));
-              modal.hide();
-              setTimeout(function() {
-                location.reload();
-              }, 500);
-            } else {
-              alert('Error: ' + response.message);
-            }
-          },
-          error: function(xhr, status, error) {
-            alert('Failed to upload signature. Please try again.');
-            console.error(error);
-          },
-          complete: function() {
-            uploadBtn.disabled = false;
-            uploadBtn.innerHTML = originalText;
-          }
-        });
-      }
-    </script>
 
   </body>
 </html>

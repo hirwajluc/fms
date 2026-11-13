@@ -456,6 +456,12 @@ class Fms extends CI_Controller {
 			'status' => 'submitted',
 			'submitted_at' => date('Y-m-d H:i:s')
 		);
+		// Signed with the staff member's signature from Settings, if they have one
+		$signature = $this->user_signature_path($user_id);
+		if($signature){
+			$timesheet_data['signature_image'] = $signature;
+			$timesheet_data['signature_date']  = date('Y-m-d H:i:s');
+		}
 
 		$timesheet_id = $this->fmsm_enhanced->create_timesheet($timesheet_data);
 
@@ -571,18 +577,16 @@ class Fms extends CI_Controller {
 		$user_id = $this->session->userdata('fms_user_id');
 		$partner_id = $this->session->userdata('fms_partner_id');
 
-		if($timesheet['user_id'] != $user_id &&
-		   !$this->auth_manager->is_super_admin() &&
-		   !$this->auth_manager->is_admin()){
-			if($this->auth_manager->is_coordinator() && $timesheet['partner_id'] != $partner_id){
-				show_error('Access Denied: You can only view timesheets from your institution.', 403);
-			} else if(!$this->auth_manager->is_coordinator()){
-				show_error('Access Denied: You can only view your own timesheets.', 403);
-			}
+		if(!$this->can_view_timesheet($timesheet)){
+			show_error($this->auth_manager->is_coordinator()
+				? 'Access Denied: You can only view timesheets from your institution.'
+				: 'Access Denied: You can only view your own timesheets.', 403);
 		}
 
 		$this->data["title"] = "FMS - View Timesheet";
 		$this->data['timesheet'] = $timesheet;
+		$this->data['has_staff_signature'] = (bool)$this->timesheet_signature_file($timesheet);
+		$this->data['is_own_timesheet']    = (int)$timesheet['user_id'] === (int)$user_id;
 		$this->data['timesheet_details'] = $this->fmsm_enhanced->get_timesheet_details($timesheet_id);
 		$this->data['work_package_summary'] = $this->fmsm_enhanced->get_timesheet_work_package_summary($timesheet_id);
 
@@ -721,6 +725,8 @@ class Fms extends CI_Controller {
 				.mt-3 { margin-top: 15px; }
 
 				.signature-section { margin-top: 30px; float: right; text-align: left; width: 300px; }
+				.signature-table { width: 100%; margin-top: 30px; page-break-inside: avoid; }
+				.signature-table td { width: 50%; border: none; padding: 0 10px 0 0; vertical-align: top; background: none; }
 				.signature-image { max-width: 200px; max-height: 100px; margin: 15px 0; }
 				.signature-line { border-top: 1px solid #333; width: 250px; margin-top: 30px; margin-bottom: 5px; }
 				.signature-label { font-size: 9px; color: #666; }
@@ -916,8 +922,20 @@ class Fms extends CI_Controller {
 					</div>
 				</div>';
 
-		// Add approver signature section from settings
-		// Try to get signature from timesheet record, if not available, fetch from approver's current settings
+		// Signatures: the staff member's on the left, the approver's on the right
+		$staff_block = '';
+		$staff_signature = $this->timesheet_signature_file($timesheet);
+		if($staff_signature){
+			$signed_at = !empty($timesheet['signature_date']) ? $timesheet['signature_date'] : $timesheet['submitted_at'];
+			$staff_block = '
+						<h5>Signed By:</h5>
+						<img src="' . $this->image_data_uri($staff_signature) . '" class="signature-image" alt="Staff Signature" />
+						<p style="margin:5px 0;font-size:11px;"><strong>Name:</strong> ' . htmlspecialchars(trim($timesheet['first_name'] . ' ' . $timesheet['last_name'])) . '</p>
+						<p style="margin:5px 0;font-size:11px;"><strong>Date Signed:</strong> ' . (!empty($signed_at) ? date('F j, Y', strtotime($signed_at)) : 'N/A') . '</p>';
+		}
+		$approver_block = '';
+
+		// Approver signature: saved with the timesheet when approved, else the approver's current one
 		$signature_data = null;
 
 		if(!empty($timesheet['approver_signature_file'])){
@@ -939,25 +957,30 @@ class Fms extends CI_Controller {
 			$approver_sig_base64 = '';
 
 			if(file_exists($approver_sig_path)){
-				$image_data = base64_encode(file_get_contents($approver_sig_path));
-				$approver_sig_base64 = 'data:image/png;base64,' . $image_data;
+				$approver_sig_base64 = $this->image_data_uri($approver_sig_path);
 			}
 
 			if(!empty($approver_sig_base64)){
-				$html .= '
-					<div class="signature-section">
+				$approver_block = '
 						<h5>Approved By:</h5>
 						<img src="' . $approver_sig_base64 . '" class="signature-image" alt="Approver Signature" />
 						<p style="margin:5px 0;font-size:11px;"><strong>Name:</strong> ' . htmlspecialchars($signature_data['signature_name']) . '</p>
 						<p style="margin:5px 0;font-size:11px;"><strong>Position:</strong> ' . htmlspecialchars($signature_data['position']) . '</p>';
 
 				if(!empty($signature_data['organization'])){
-					$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Organization:</strong> ' . htmlspecialchars($signature_data['organization']) . '</p>';
+					$approver_block .= '<p style="margin:5px 0;font-size:11px;"><strong>Organization:</strong> ' . htmlspecialchars($signature_data['organization']) . '</p>';
 				}
 
-				$html .= '<p style="margin:5px 0;font-size:11px;"><strong>Date Approved:</strong> ' . (!empty($timesheet['approved_at']) ? date('F j, Y', strtotime($timesheet['approved_at'])) : 'N/A') . '</p>
-					</div>';
+				$approver_block .= '<p style="margin:5px 0;font-size:11px;"><strong>Date Approved:</strong> ' . (!empty($timesheet['approved_at']) ? date('F j, Y', strtotime($timesheet['approved_at'])) : 'N/A') . '</p>';
 			}
+		}
+
+		if($staff_block || $approver_block){
+			$html .= '
+				<table class="signature-table"><tr>
+					<td>' . $staff_block . '</td>
+					<td>' . $approver_block . '</td>
+				</tr></table>';
 		}
 
 		$html .= '
@@ -1107,6 +1130,12 @@ class Fms extends CI_Controller {
 			'status' => 'submitted',
 			'submitted_at' => date('Y-m-d H:i:s')
 		);
+		// Re-signed with the staff member's current signature; an earlier one is kept if they have none now
+		$signature = $this->user_signature_path($timesheet['user_id']);
+		if($signature){
+			$timesheet_data['signature_image'] = $signature;
+			$timesheet_data['signature_date']  = date('Y-m-d H:i:s');
+		}
 
 		if($this->fmsm_enhanced->update_timesheet($timesheet_id, $timesheet_data)){
 			// Delete existing details
@@ -1823,7 +1852,7 @@ class Fms extends CI_Controller {
 			$sig_path = FCPATH . 'assets/signatures/' . $signature['signature_file'];
 			$sig_img  = '';
 			if(file_exists($sig_path)){
-				$sig_img = 'data:image/png;base64,'.base64_encode(file_get_contents($sig_path));
+				$sig_img = $this->image_data_uri($sig_path);
 			}
 			$html .= '<div class="sig-wrap"><div class="sig-l"></div><div class="sig-r"><div class="sig-box">';
 			if($sig_img) $html .= '<img src="'.$sig_img.'" class="sig-img" alt="Signature"><br>';
@@ -1974,8 +2003,7 @@ class Fms extends CI_Controller {
 			// Convert image to base64 for embedding in PDF
 			$signature_image = '';
 			if(file_exists($signature_path)){
-				$image_data = base64_encode(file_get_contents($signature_path));
-				$signature_image = 'data:image/png;base64,' . $image_data;
+				$signature_image = $this->image_data_uri($signature_path);
 			}
 
 			$html .= '<div class="signature-section">';
@@ -2951,10 +2979,7 @@ class Fms extends CI_Controller {
 				mkdir($signatures_dir, 0777, true);
 			}
 
-			// Delete old signature file if exists
-			if(!empty($signature_file) && file_exists($signatures_dir . $signature_file)){
-				unlink($signatures_dir . $signature_file);
-			}
+			// The old image is kept: timesheets and expenses approved with it still show it
 
 			// Generate unique filename
 			$signature_file = 'signature_' . $user_id . '_' . time() . '.png';
@@ -3082,6 +3107,133 @@ class Fms extends CI_Controller {
 			show_error('No signature uploaded.', 404);
 		}
 		$this->send_private_file(FCPATH . 'assets/signatures/' . basename($signature['signature_file']), $signature['signature_file']);
+	}
+
+	/**
+	 * Upload or remove the signed-in user's signature (Settings page). It goes on
+	 * the timesheets they submit; coordinators and admins also sign approvals and
+	 * reports with it. Earlier images are kept for what was already signed.
+	 */
+	public function updateMySignature(){
+		header('Content-Type: application/json');
+
+		// AJAX POST only, so a cross-site form cannot replace someone's signature
+		if($this->input->method() !== 'post' || !$this->input->is_ajax_request()){
+			set_status_header(405);
+			echo json_encode(['success' => false, 'message' => 'Invalid request.']); return;
+		}
+
+		$user_id  = (int)$this->session->userdata('fms_user_id');
+		$key      = 'report_signature_' . $user_id;
+		$existing = $this->fmsm_enhanced->get_signature_by_user_id($user_id);
+		$existing = is_array($existing) ? $existing : array();
+
+		if($this->input->post('remove') === '1'){
+			if(!empty($existing['signature_file'])){
+				$existing['signature_file'] = '';
+				$this->fmsm_enhanced->save_setting($key, json_encode($existing), 'json', 'Signature for user ' . $user_id);
+			}
+			echo json_encode(['success' => true, 'removed' => true, 'message' => 'Signature removed. New timesheets will not be signed.']); return;
+		}
+
+		$upload = isset($_FILES['signature']) ? $_FILES['signature'] : NULL;
+		if(!$upload || $upload['error'] !== UPLOAD_ERR_OK){
+			echo json_encode(['success' => false, 'message' => 'Please choose an image of your signature.']); return;
+		}
+		if($upload['size'] > 2 * 1024 * 1024){
+			echo json_encode(['success' => false, 'message' => 'The image is too large (max 2 MB).']); return;
+		}
+		// Judge the file by its content, not its name or the browser's label
+		$info  = @getimagesize($upload['tmp_name']);
+		$types = array(IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg');
+		if(!$info || !isset($types[$info[2]]) || $info[0] < 1 || $info[1] < 1 || $info[0] > 6000 || $info[1] > 6000){
+			echo json_encode(['success' => false, 'message' => 'Only PNG or JPG images can be used as a signature.']); return;
+		}
+
+		$dir = FCPATH . 'assets/signatures/';
+		if(!is_dir($dir)){
+			mkdir($dir, 0755, TRUE);
+		}
+		$file = 'signature_' . $user_id . '_' . time() . '.' . $types[$info[2]];
+		if(!move_uploaded_file($upload['tmp_name'], $dir . $file)){
+			echo json_encode(['success' => false, 'message' => 'Could not save the image. Please try again.']); return;
+		}
+
+		// First signature: name, position and organization come from the staff record
+		if(empty($existing['signature_name'])){
+			$user = $this->fmsm_enhanced->get_user_by_id($user_id);
+			$existing['signature_name'] = $user ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+			$existing['position']       = $user ? (string)($user['position'] ?: $user['department']) : '';
+			$existing['organization']   = $user ? (string)$user['partner_name'] : '';
+		}
+		$existing['user_id']        = $user_id;
+		$existing['signature_file'] = $file;
+
+		if(!$this->fmsm_enhanced->save_setting($key, json_encode($existing), 'json', 'Signature for user ' . $user_id)){
+			echo json_encode(['success' => false, 'message' => 'Could not save your signature. Please try again.']); return;
+		}
+		$this->fmsm_enhanced->log_activity($user_id, 'update_signature', 'user', $user_id, 'Signature updated');
+
+		echo json_encode([
+			'success'     => true,
+			'message'     => 'Signature saved. It will be added to the timesheets you submit.',
+			'preview_url' => base_url('mySignature') . '?v=' . substr(md5($file), 0, 8)
+		]);
+	}
+
+	/** The staff signature on a timesheet, for whoever can view that timesheet */
+	public function timesheetSignature($timesheet_id){
+		$timesheet = $this->fmsm_enhanced->get_timesheet_by_id((int)$timesheet_id);
+		if(!$timesheet){
+			show_error('Timesheet not found.', 404);
+		}
+		if(!$this->can_view_timesheet($timesheet)){
+			show_error('Access Denied.', 403);
+		}
+		$path = $this->timesheet_signature_file($timesheet);
+		if(!$path){
+			show_error('This timesheet is not signed.', 404);
+		}
+		$this->send_private_file($path, basename($path));
+	}
+
+	/** Who may view a timesheet: its owner, Super Admins and admins, and coordinators of its partner */
+	private function can_view_timesheet($timesheet){
+		if((int)$timesheet['user_id'] === (int)$this->session->userdata('fms_user_id') || $this->auth_manager->is_admin()){
+			return TRUE;
+		}
+		return $this->auth_manager->is_coordinator()
+			&& (int)$timesheet['partner_id'] === (int)$this->session->userdata('fms_partner_id');
+	}
+
+	/** A user's current signature as a path under assets/, or NULL if they have none */
+	private function user_signature_path($user_id){
+		$signature = $this->fmsm_enhanced->get_signature_by_user_id($user_id);
+		if(empty($signature['signature_file'])){
+			return NULL;
+		}
+		$path = 'assets/signatures/' . basename($signature['signature_file']);
+		return is_file(FCPATH . $path) ? $path : NULL;
+	}
+
+	/**
+	 * The staff signature file for a timesheet: the one it was signed with when
+	 * submitted, else the owner's current signature. NULL if there is none.
+	 */
+	private function timesheet_signature_file($timesheet){
+		$saved = isset($timesheet['signature_image']) ? (string)$timesheet['signature_image'] : '';
+		if(preg_match('#^assets/(uploads/)?signatures/[^/]+$#', $saved) && is_file(FCPATH . $saved)){
+			return FCPATH . $saved;
+		}
+		$current = $this->user_signature_path($timesheet['user_id']);
+		return $current ? FCPATH . $current : NULL;
+	}
+
+	/** An image as a data: URI for PDFs, with its type read from the file itself */
+	private function image_data_uri($path){
+		$info = @getimagesize($path);
+		$mime = ($info && in_array($info['mime'], array('image/png', 'image/jpeg', 'image/gif'), TRUE)) ? $info['mime'] : 'image/png';
+		return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($path));
 	}
 
 	// ==================== END PROTECTED FILES ====================
@@ -3845,6 +3997,10 @@ class Fms extends CI_Controller {
 		$user_id = $this->session->userdata('fms_user_id');
 		$this->data['notifications_supported'] = $this->fmsm_enhanced->email_notifications_supported();
 		$this->data['notifications_enabled']   = $this->fmsm_enhanced->get_email_notification_preference($user_id);
+
+		$signature = $this->user_signature_path($user_id);
+		$this->data['signature_url'] = $signature ? base_url('mySignature') . '?v=' . substr(md5($signature), 0, 8) : '';
+		$this->data['signs_approvals'] = $this->auth_manager->is_admin() || $this->auth_manager->is_coordinator();
 
 		$this->load->view('pages/settings', $this->data);
 	}
