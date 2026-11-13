@@ -3051,6 +3051,23 @@ class Fms extends CI_Controller {
 	}
 
 	/**
+	 * Whether the signed-in user may open this Other Files record. Super Admins see
+	 * every file; a coordinator sees only the files they uploaded for their own
+	 * partner, the same files their list shows them.
+	 */
+	private function can_access_other_file($file){
+		if(empty($file)){
+			return FALSE;
+		}
+		if($this->auth_manager->is_super_admin()){
+			return TRUE;
+		}
+		return $this->auth_manager->is_coordinator()
+			&& (int)$file['partner_id'] === (int)$this->session->userdata('fms_partner_id')
+			&& (int)$file['uploaded_by'] === (int)$this->session->userdata('fms_user_id');
+	}
+
+	/**
 	 * File list view for a specific Work Package.
 	 */
 	public function otherFilesWP($wp_id){
@@ -3107,6 +3124,10 @@ class Fms extends CI_Controller {
 
 		if(!$this->fmsm_enhanced->get_work_package_by_id($wp_id)){
 			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'Invalid work package.']); return;
+		}
+
+		if($file_id > 0 && !$this->can_access_other_file($this->fmsm_enhanced->get_other_file_by_id($file_id))){
+			ob_end_clean(); echo json_encode(['success' => false, 'message' => 'You cannot add a version to this file.']); return;
 		}
 
 		if(empty($_FILES['upload_file']['name'])){
@@ -3224,7 +3245,11 @@ class Fms extends CI_Controller {
 			return;
 		}
 
-		$file     = $this->fmsm_enhanced->get_other_file_by_id($file_id);
+		$file = $this->fmsm_enhanced->get_other_file_by_id($file_id);
+		if(!$this->can_access_other_file($file)){
+			echo json_encode(['success' => false, 'message' => $file ? 'Access denied.' : 'File not found.']);
+			return;
+		}
 		$versions = $this->fmsm_enhanced->get_file_versions($file_id);
 
 		echo json_encode([
@@ -3246,8 +3271,11 @@ class Fms extends CI_Controller {
 		if(!$version){
 			show_error('Version not found.', 404);
 		}
+		if(!$this->can_access_other_file($this->fmsm_enhanced->get_other_file_by_id($version['file_id']))){
+			show_error('Access Denied: You do not have access to this file.', 403);
+		}
 
-		$file_path = FCPATH . 'assets/otherfiles/' . $version['stored_name'];
+		$file_path = FCPATH . 'assets/otherfiles/' . basename($version['stored_name']);
 		if(!file_exists($file_path)){
 			show_error('File not found on server.', 404);
 		}
@@ -3293,6 +3321,9 @@ class Fms extends CI_Controller {
 	/** Return JSON comments for a file */
 	public function getFileComments($file_id){
 		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_coordinator()){
+			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
+		}
+		if(!$this->can_access_other_file($this->fmsm_enhanced->get_other_file_by_id($file_id))){
 			echo json_encode(['success' => false, 'message' => 'Access denied.']); return;
 		}
 		$comments = $this->fmsm_enhanced->get_comments_by_file($file_id);

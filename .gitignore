@@ -23,6 +23,7 @@ assets/signatures/*
 !assets/signatures/.gitkeep
 assets/otherfiles/*
 !assets/otherfiles/.gitkeep
+!assets/otherfiles/.htaccess
 
 # IDE and OS files
 .vscode/
