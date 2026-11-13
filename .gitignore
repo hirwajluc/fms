@@ -19,8 +19,10 @@ application/backups/
 # Uploaded user files (managed outside git)
 assets/uploads/*
 !assets/uploads/.gitkeep
+!assets/uploads/.htaccess
 assets/signatures/*
 !assets/signatures/.gitkeep
+!assets/signatures/.htaccess
 assets/otherfiles/*
 !assets/otherfiles/.gitkeep
 !assets/otherfiles/.htaccess

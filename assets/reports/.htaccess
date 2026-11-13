@@ -1,0 +1,9 @@
+# Generated reports are never served directly. FMS hands them out through
+# reportFile, which only opens a report for the person who generated it.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

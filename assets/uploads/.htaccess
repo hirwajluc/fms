@@ -1,0 +1,9 @@
+# Expense receipts and timesheet signatures are never served directly. FMS hands them out
+# through expenseFile, which checks who is asking.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

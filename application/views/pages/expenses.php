@@ -185,7 +185,10 @@
 					<tbody>
 						<?php foreach ($expenses as $expense) {
 									// Determine file extension and path
-									$file_path = base_url().'assets/uploads/'.$expense['FileName'];
+									// Receipts are served by expenseFile, which checks access
+									$file_path = base_url('expenseFile/' . (int)$expense['expense_id']);
+									$file_name = htmlspecialchars($expense['FileName'], ENT_QUOTES);
+									$view_js   = htmlspecialchars('viewPDF(' . json_encode($file_path) . ', ' . json_encode((string)$expense['FileName']) . ')', ENT_QUOTES);
 									$file_extension = pathinfo($expense['FileName'], PATHINFO_EXTENSION);
 
 									// Map work package to full name
@@ -218,12 +221,12 @@
 						<tr>
 							<td>
 								<?php if(strtolower($file_extension) == 'pdf'): ?>
-								<a href="javascript:void(0)" onclick="viewPDF('<?=$file_path;?>', '<?=$expense['FileName'];?>')">
-									<i class="ti ti-file-text me-1"></i><?=$expense['FileName'];?>
+								<a href="javascript:void(0)" onclick="<?=$view_js;?>">
+									<i class="ti ti-file-text me-1"></i><?=$file_name;?>
 								</a>
 								<?php else: ?>
 								<a href="<?=$file_path;?>" target="_blank">
-									<i class="ti ti-file me-1"></i><?=$expense['FileName'];?>
+									<i class="ti ti-file me-1"></i><?=$file_name;?>
 								</a>
 								<?php endif; ?>
 							</td>
@@ -253,7 +256,7 @@
 							<td>
 								<div class="btn-group" role="group">
 									<?php if(strtolower($file_extension) == 'pdf'): ?>
-									<button type="button" class="btn btn-sm btn-info" onclick="viewPDF('<?=$file_path;?>', '<?=htmlspecialchars($expense['FileName'], ENT_QUOTES);?>')">
+									<button type="button" class="btn btn-sm btn-info" onclick="<?=$view_js;?>">
 										<i class="ti ti-eye"></i> View
 									</button>
 									<?php else: ?>

@@ -136,7 +136,7 @@
                       <div class="col-12">
                         <label class="form-label">Current Signature Preview</label>
                         <div class="border rounded p-3 bg-light text-center">
-                          <img src="<?=base_url('assets/signatures/' . $current_signature['signature_file']);?>"
+                          <img src="<?=base_url('mySignature');?>?v=<?=substr(md5($current_signature['signature_file']), 0, 8);?>"
                                alt="Current Signature"
                                style="max-height: 100px; max-width: 300px;">
                         </div>

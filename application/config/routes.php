@@ -59,6 +59,9 @@ $route['approveExpense/(:num)'] = 'fms/approveExpense/$1';
 $route['rejectExpense/(:num)'] = 'fms/rejectExpense/$1';
 $route['generateReport'] = 'fms/generateReport';
 $route['generateTimesheetReport'] = 'fms/generateTimesheetReport';
+$route['expenseFile/(:num)'] = 'fms/expenseFile/$1';
+$route['reportFile/([a-f0-9]{32})'] = 'fms/reportFile/$1';
+$route['mySignature'] = 'fms/mySignature';
 
 // Timesheet routes
 $route['timesheets'] = 'fms/timesheets';

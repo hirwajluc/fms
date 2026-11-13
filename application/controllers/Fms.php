@@ -1488,21 +1488,12 @@ class Fms extends CI_Controller {
 		// Generate filename
 		$filename = 'Expense_Report_' . date('Y-m-d', strtotime($from_date)) . '_to_' . date('Y-m-d', strtotime($to_date)) . '.pdf';
 
-		// Save PDF to temporary directory
-		$reports_dir = FCPATH . 'assets/reports/';
-		if(!is_dir($reports_dir)){
-			mkdir($reports_dir, 0777, true);
-		}
-
-		$file_path = $reports_dir . $filename;
-		file_put_contents($file_path, $dompdf->output());
-
 		// Return JSON response for AJAX request or stream for direct access
 		if($this->input->is_ajax_request()){
 			echo json_encode([
 				'success' => true,
 				'message' => 'Report generated successfully',
-				'file_url' => base_url('assets/reports/' . $filename),
+				'file_url' => $this->keep_report($dompdf->output(), $filename),
 				'file_name' => $filename
 			]);
 		} else {
@@ -1562,14 +1553,11 @@ class Fms extends CI_Controller {
 		$dompdf->render();
 
 		$filename = 'Timesheet_Report_'.str_replace(' ','_',$from_label).'_to_'.str_replace(' ','_',$to_label).'.pdf';
-		$reports_dir = FCPATH . 'assets/reports/';
-		if(!is_dir($reports_dir)) mkdir($reports_dir, 0777, true);
-		file_put_contents($reports_dir . $filename, $dompdf->output());
 
 		echo json_encode([
 			'success'  => true,
 			'message'  => 'Report generated successfully',
-			'file_url' => base_url('assets/reports/' . $filename) . '?v=' . time(),
+			'file_url' => $this->keep_report($dompdf->output(), $filename),
 			'file_name'=> $filename
 		]);
 	}
@@ -3005,6 +2993,98 @@ class Fms extends CI_Controller {
 	}
 
 	// ==================== END REPORT SIGNATURES MANAGEMENT ====================
+
+	// ============================================================
+	// PROTECTED FILES – expense receipts, generated reports, signatures
+	// Their folders are closed to the web; these actions check who is asking.
+	// ============================================================
+
+	/**
+	 * Send a stored file. PDFs and images open in the browser, anything else downloads.
+	 */
+	private function send_private_file($path, $download_name){
+		if(!is_file($path)){
+			show_error('File not found on server.', 404);
+		}
+		$types = array('pdf' => 'application/pdf', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif');
+		$ext   = strtolower(pathinfo($download_name, PATHINFO_EXTENSION));
+		$name  = str_replace(array('"', '\\', "\r", "\n"), '', basename($download_name));
+		while(ob_get_level() > 0){
+			ob_end_clean();
+		}
+		header('Content-Type: ' . (isset($types[$ext]) ? $types[$ext] : 'application/octet-stream'));
+		header('Content-Disposition: ' . (isset($types[$ext]) ? 'inline' : 'attachment') . '; filename="' . $name . '"');
+		header('Content-Length: ' . filesize($path));
+		header('X-Content-Type-Options: nosniff');
+		header('Cache-Control: private, no-store');
+		readfile($path);
+		exit;
+	}
+
+	/**
+	 * An expense's receipt, for whoever can see that expense in the list:
+	 * Super Admins and admins see every expense, coordinators their own partner's.
+	 */
+	public function expenseFile($expense_id){
+		$expense = $this->fmsm_enhanced->get_expense_by_id((int)$expense_id);
+		if(!$expense){
+			show_error('Expense not found.', 404);
+		}
+		$allowed = $this->auth_manager->is_admin()
+			|| ($this->auth_manager->can_upload_expenses()
+				&& (int)$expense['partner_id'] === (int)$this->session->userdata('fms_partner_id'));
+		if(!$allowed){
+			show_error('Access Denied: You do not have access to this receipt.', 403);
+		}
+		if(empty($expense['FileName'])){
+			show_error('This expense has no file.', 404);
+		}
+		$this->send_private_file(FCPATH . 'assets/uploads/' . basename($expense['FileName']), $expense['FileName']);
+	}
+
+	/**
+	 * Keep a generated report where only the person who generated it can open it:
+	 * under a random name in assets/reports, remembered in their login session.
+	 * Returns the address the page opens it from.
+	 */
+	private function keep_report($pdf, $filename){
+		$dir = FCPATH . 'assets/reports/';
+		if(!is_dir($dir)){
+			mkdir($dir, 0755, TRUE);
+		}
+		// Clear reports older than a day, including the date-named copies saved by earlier versions
+		foreach(glob($dir . '*.pdf') ?: array() as $old){
+			if(preg_match('/^([a-f0-9]{32}|(Expense|Timesheet)_Report_.+)\.pdf$/', basename($old)) && filemtime($old) < time() - 86400){
+				@unlink($old);
+			}
+		}
+		$token = bin2hex(random_bytes(16));
+		file_put_contents($dir . $token . '.pdf', $pdf);
+		$reports = (array)$this->session->userdata('fms_reports');
+		$reports[$token] = $filename;
+		$this->session->set_userdata('fms_reports', array_slice($reports, -10, 10, TRUE));
+		return base_url('reportFile/' . $token);
+	}
+
+	/** A report generated earlier in this login session */
+	public function reportFile($token){
+		$reports = (array)$this->session->userdata('fms_reports');
+		if(!preg_match('/^[a-f0-9]{32}$/', (string)$token) || !isset($reports[$token])){
+			show_error('This report is not available any more. Please generate it again.', 404);
+		}
+		$this->send_private_file(FCPATH . 'assets/reports/' . $token . '.pdf', $reports[$token]);
+	}
+
+	/** The signed-in user's own report signature image (Report Signatures page) */
+	public function mySignature(){
+		$signature = $this->fmsm_enhanced->get_signature_by_user_id($this->session->userdata('fms_user_id'));
+		if(empty($signature['signature_file'])){
+			show_error('No signature uploaded.', 404);
+		}
+		$this->send_private_file(FCPATH . 'assets/signatures/' . basename($signature['signature_file']), $signature['signature_file']);
+	}
+
+	// ==================== END PROTECTED FILES ====================
 
 	// ============================================================
 	// OTHER FILES – WORK PACKAGES, FILES & VERSIONS
