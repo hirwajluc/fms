@@ -930,7 +930,7 @@ class Fms extends CI_Controller {
 			$staff_block = '
 						<h5>Signed By:</h5>
 						<img src="' . $this->image_data_uri($staff_signature) . '" class="signature-image" alt="Staff Signature" />
-						<p style="margin:5px 0;font-size:11px;"><strong>Name:</strong> ' . htmlspecialchars(trim($timesheet['first_name'] . ' ' . $timesheet['last_name'])) . '</p>
+						<p style="margin:5px 0;font-size:11px;"><strong>Name:</strong> ' . htmlspecialchars($this->person_name($timesheet)) . '</p>
 						<p style="margin:5px 0;font-size:11px;"><strong>Date Signed:</strong> ' . (!empty($signed_at) ? date('F j, Y', strtotime($signed_at)) : 'N/A') . '</p>';
 		}
 		$approver_block = '';
@@ -2053,211 +2053,248 @@ class Fms extends CI_Controller {
 		$this->load->view('pages/users', $this->data);
 	}
 
-	public function newUser(){
-		// Only admins and coordinators can create users
+	// ==================== PEOPLE: one form for users and staff ====================
+	// New User and New Staff Member both create a staff record with its login
+	// account, and the edit pages show the same personal and institution fields,
+	// so all four use one form (pages/personform) and the rules below.
+
+	private static $ROLE_NAMES = array(1 => 'Super Admin', 2 => 'Admin', 3 => 'Institution Coordinator', 4 => 'Member');
+
+	private function require_people_manager($what){
 		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to create users.', 403);
+			show_error('Access Denied: You do not have permission to ' . $what . '.', 403);
 		}
-
-		$this->data["title"] = "FMS - New User";
-
-		// Get all partners for super admin/admin
-		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			$this->data['partners'] = $this->fmsm_enhanced->get_all_partners();
-		}
-
-		// Get all roles
-		$this->data['roles'] = $this->fmsm_enhanced->get_all_roles();
-
-		$this->load->view('pages/newuser', $this->data);
 	}
 
-	public function saveUser() {
-		// Only admins and coordinators can create users
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to create users.', 403);
+	/** Roles the signed-in user may give: Super Admins any, Admins any but Super Admin, coordinators only Member */
+	private function can_assign_role($role_id){
+		$role_id = (int)$role_id;
+		if($this->auth_manager->is_super_admin()){
+			return isset(self::$ROLE_NAMES[$role_id]);
 		}
-
-		// Validate inputs
-		$this->form_validation->set_rules('first_name', 'First Name', 'required|trim');
-		$this->form_validation->set_rules('last_name', 'Last Name', 'required|trim');
-		$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim');
-		$this->form_validation->set_rules('password', 'Password', 'required|min_length[6]');
-		$this->form_validation->set_rules('role_id', 'Role', 'required');
-		$this->form_validation->set_rules('position', 'Position', 'required|trim');
-
-		if($this->form_validation->run() == FALSE){
-			$this->session->set_flashdata('error', validation_errors());
-			redirect('newUser');
-			return;
+		if($this->auth_manager->is_admin()){
+			return $role_id >= 2 && $role_id <= 4;
 		}
+		return $this->auth_manager->is_coordinator() && $role_id === 4;
+	}
 
-		// Get partner_id based on role
+	/**
+	 * Whether the signed-in user may edit this person. Super Admins: everyone.
+	 * Admins: everyone but Super Admins. Coordinators: Members and people without a
+	 * login account at their own partner. Everyone: themselves.
+	 */
+	private function can_manage_person($partner_id, $role_id, $user_id){
+		if($this->auth_manager->is_super_admin()){
+			return TRUE;
+		}
+		if($user_id && (int)$user_id === (int)$this->session->userdata('fms_user_id')){
+			return TRUE;
+		}
+		if($this->auth_manager->is_admin()){
+			return (int)$role_id !== 1;
+		}
+		return $this->auth_manager->is_coordinator()
+			&& (int)$partner_id === (int)$this->session->userdata('fms_partner_id')
+			&& ($role_id === NULL || (int)$role_id === 4);
+	}
+
+	private function show_person_form($mode, $person = array(), $error = NULL){
+		$titles = array('new_user' => 'FMS - New User', 'new_staff' => 'FMS - New Staff Member', 'edit_user' => 'FMS - Edit User', 'edit_staff' => 'FMS - Edit Staff Member');
+		$this->data['title']            = $titles[$mode];
+		$this->data['mode']             = $mode;
+		$this->data['person']           = $person;
+		$this->data['form_error']       = $error;
+		$this->data['titles_supported'] = $this->fmsm_enhanced->staff_title_supported();
+		$this->data['roles'] = array_values(array_filter($this->fmsm_enhanced->get_all_roles(), function($role){
+			return $this->can_assign_role($role['role_id']);
+		}));
+		$this->data['partners'] = ($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin())
+			? $this->fmsm_enhanced->get_all_partners() : array();
+		$this->load->view('pages/personform', $this->data);
+	}
+
+	/** Validation for the shared form. $statuses NULL: no role or status (people editing themselves). */
+	private function person_rules($with_role, $statuses){
+		$v = $this->form_validation;
+		$v->set_rules('title', 'Title', 'trim|max_length[50]');
+		$v->set_rules('first_name', 'First Name', 'required|trim|max_length[100]');
+		$v->set_rules('last_name', 'Last Name', 'required|trim|max_length[100]');
+		$v->set_rules('email', 'Email Address', 'required|trim|valid_email|max_length[255]');
+		$v->set_rules('phone', 'Phone Number', 'trim|max_length[50]');
+		$v->set_rules('position', 'Position', 'required|trim|max_length[100]');
+		$v->set_rules('department', 'Department', 'trim|max_length[100]');
+		$v->set_rules('greater_role', 'GREATER Project Role', 'trim|max_length[50]');
+		$v->set_rules('employee_number', 'Employee Number', 'trim|max_length[50]');
+		$v->set_rules('hire_date', 'Hire Date', 'trim|regex_match[/^(\d{4}-\d{2}-\d{2})?$/]');
 		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			$partner_id = $this->input->post('partner_id');
-		} else {
-			$partner_id = $this->session->userdata("fms_partner_id");
+			$v->set_rules('partner_id', 'Partner/Institution', 'required|is_natural_no_zero');
 		}
-
-		// Role restrictions - coordinators can only create members
-		$role_id = $this->input->post('role_id');
-		if($this->auth_manager->is_coordinator() && $role_id != 4){
-			$this->session->set_flashdata('error', 'Coordinators can only create Member accounts.');
-			redirect('newUser');
-			return;
+		if($with_role){
+			$v->set_rules('role_id', 'Role', 'required|is_natural_no_zero');
 		}
+		if($statuses){
+			$v->set_rules('status', 'Status', 'required|in_list[' . implode(',', $statuses) . ']');
+		}
+	}
 
-		// Create staff first
-		$staff_data = array(
-			'first_name' => $this->input->post('first_name'),
-			'last_name' => $this->input->post('last_name'),
-			'email' => $this->input->post('email'),
-			'partner_id' => $partner_id,
-			'position' => $this->input->post('position'),
-			'status' => 'active'
+	/** Staff fields from the shared form; coordinators always keep their own partner */
+	private function person_staff_data(){
+		$post = function($field){
+			$value = trim(preg_replace('/\s+/u', ' ', (string)$this->input->post($field)));
+			return $value === '' ? NULL : $value;
+		};
+		$hire = $post('hire_date');
+		$date = $hire ? DateTime::createFromFormat('Y-m-d', $hire) : FALSE;
+		$data = array(
+			'first_name'      => $post('first_name'),
+			'last_name'       => $post('last_name'),
+			'email'           => $post('email'),
+			'phone'           => $post('phone'),
+			'position'        => $post('position'),
+			'department'      => $post('department'),
+			'greater_role'    => $post('greater_role'),
+			'employee_number' => $post('employee_number'),
+			'hire_date'       => ($date && $date->format('Y-m-d') === $hire) ? $hire : NULL,
+			'partner_id'      => ($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin())
+				? (int)$this->input->post('partner_id') : (int)$this->session->userdata('fms_partner_id'),
 		);
-
-		$staff_id = $this->fmsm_enhanced->create_staff($staff_data);
-
-		if($staff_id){
-			// Generate a temporary password (ignore admin-entered value for security)
-			$chars    = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
-			$tmp_pass = '';
-			for($i = 0; $i < 10; $i++) $tmp_pass .= $chars[random_int(0, strlen($chars) - 1)];
-
-			// Create user account
-			$user_data = array(
-				'staff_id'              => $staff_id,
-				'email'                 => $this->input->post('email'),
-				'password'              => sha1($tmp_pass),
-				'role_id'               => $role_id,
-				'status'                => 'active',
-				'force_password_change' => 1,
-			);
-
-			if($this->fmsm_enhanced->create_user($user_data)){
-				$role_names = [1=>'Super Admin',2=>'Admin',3=>'Institution Coordinator',4=>'Member'];
-				$mail_sent  = $this->fms_mailer->account_created(
-					$this->input->post('email'),
-					$this->input->post('first_name') . ' ' . $this->input->post('last_name'),
-					$tmp_pass,
-					$role_names[$role_id] ?? 'Member'
-				);
-				if($mail_sent){
-					$this->session->set_flashdata('success', 'User created successfully. A temporary password has been sent to their email.');
-				} else {
-					$this->session->set_flashdata('success', 'User created successfully. Temporary password: <strong>' . htmlspecialchars($tmp_pass) . '</strong> — the welcome email could not be sent, please share it manually.');
-				}
-				redirect('users');
-			} else {
-				$this->session->set_flashdata('error', 'Failed to create user account.');
-				redirect('newUser');
-			}
-		} else {
-			$this->session->set_flashdata('error', 'Failed to create staff record.');
-			redirect('newUser');
+		if($this->fmsm_enhanced->staff_title_supported()){
+			$data['title'] = $post('title');
 		}
+		return $data;
+	}
+
+	/** "Prof. Dr.-Ing. Jane Doe" */
+	private function person_name($person){
+		$title = isset($person['title']) ? $person['title'] : '';
+		return trim(preg_replace('/\s+/u', ' ', $title . ' ' . $person['first_name'] . ' ' . $person['last_name']));
+	}
+
+	private function temporary_password(){
+		$chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
+		$pass  = '';
+		for($i = 0; $i < 10; $i++){
+			$pass .= $chars[random_int(0, strlen($chars) - 1)];
+		}
+		return $pass;
+	}
+
+	/** New User and New Staff Member: a staff record and its login account, saved together */
+	private function create_person($mode){
+		$this->require_people_manager('create users');
+		$this->person_rules(TRUE, array('active', 'inactive'));
+		if($this->form_validation->run() === FALSE){
+			return $this->show_person_form($mode);
+		}
+
+		$role_id = (int)$this->input->post('role_id');
+		$staff   = $this->person_staff_data();
+		$error   = NULL;
+		if(!$this->can_assign_role($role_id)){
+			$error = 'You cannot give that role.';
+		} elseif(!$staff['partner_id'] || !$this->fmsm_enhanced->get_partner_by_id($staff['partner_id'])){
+			$error = 'Please choose a partner institution.';
+		} elseif($this->fmsm_enhanced->email_in_use($staff['email'])){
+			$error = 'This email address is already used by someone else.';
+		}
+		if($error){
+			return $this->show_person_form($mode, array(), $error);
+		}
+
+		$status          = $this->input->post('status');
+		$staff['status'] = $status;
+		$tmp_pass        = $this->temporary_password();
+		$user_id = $this->fmsm_enhanced->create_user(array(
+			'email'                 => $staff['email'],
+			'password'              => sha1($tmp_pass),
+			'role_id'               => $role_id,
+			'status'                => $status,
+			'force_password_change' => 1,
+		), $staff);
+		if(!$user_id){
+			return $this->show_person_form($mode, array(), 'The account could not be created. Please try again.');
+		}
+
+		$name = $this->person_name($staff);
+		if($this->fms_mailer->account_created($staff['email'], $name, $tmp_pass, self::$ROLE_NAMES[$role_id])){
+			$this->session->set_flashdata('success', 'Account created for ' . htmlspecialchars($name) . '. A temporary password has been emailed to ' . htmlspecialchars($staff['email']) . '.');
+		} else {
+			$this->session->set_flashdata('success', 'Account created for ' . htmlspecialchars($name) . '. Temporary password: <strong>' . htmlspecialchars($tmp_pass) . '</strong>. The welcome email could not be sent, please share it with ' . htmlspecialchars($staff['email']) . ' yourself.');
+		}
+		redirect('users');
+	}
+
+	public function newUser(){
+		$this->require_people_manager('create users');
+		$this->show_person_form('new_user');
+	}
+
+	public function saveUser(){
+		$this->create_person('new_user');
 	}
 
 	public function editUser($user_id){
-		// Only admins and coordinators can edit users
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to edit users.', 403);
-		}
-
-		$this->data["title"] = "FMS - Edit User";
-
-		// Get user details
-		$this->data['user'] = $this->fmsm_enhanced->get_user_by_id($user_id);
-
-		if(!$this->data['user']){
+		$this->require_people_manager('edit users');
+		$person = $this->fmsm_enhanced->get_user_by_id($user_id);
+		if(!$person){
 			show_error('User not found.', 404);
 		}
-
-		// Coordinators can only edit users from their institution
-		if($this->auth_manager->is_coordinator()){
-			$partner_id = $this->session->userdata('fms_partner_id');
-			if($this->data['user']['partner_id'] != $partner_id){
-				show_error('Access Denied: You can only edit users from your institution.', 403);
-			}
+		if(!$this->can_manage_person($person['partner_id'], $person['role_id'], $person['user_id'])){
+			show_error('Access Denied: You cannot edit this user.', 403);
 		}
-
-		// Get all partners for super admin/admin
-		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			$this->data['partners'] = $this->fmsm_enhanced->get_all_partners();
-		}
-
-		// Get all roles
-		$this->data['roles'] = $this->fmsm_enhanced->get_all_roles();
-
-		$this->load->view('pages/edituser', $this->data);
+		$this->show_person_form('edit_user', $person);
 	}
 
-	public function updateUser($user_id) {
-		// Only admins and coordinators can update users
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to update users.', 403);
-		}
-
-		// Validate inputs
-		$this->form_validation->set_rules('first_name', 'First Name', 'required|trim');
-		$this->form_validation->set_rules('last_name', 'Last Name', 'required|trim');
-		$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim');
-		$this->form_validation->set_rules('role_id', 'Role', 'required');
-		$this->form_validation->set_rules('position', 'Position', 'required|trim');
-
-		if($this->form_validation->run() == FALSE){
-			$this->session->set_flashdata('error', validation_errors());
-			redirect('editUser/'.$user_id);
-			return;
-		}
-
-		$user = $this->fmsm_enhanced->get_user_by_id($user_id);
-
-		if(!$user){
+	public function updateUser($user_id){
+		$this->require_people_manager('update users');
+		$person = $this->fmsm_enhanced->get_user_by_id($user_id);
+		if(!$person){
 			show_error('User not found.', 404);
 		}
-
-		// Get partner_id based on role
-		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			$partner_id = $this->input->post('partner_id');
-		} else {
-			$partner_id = $this->session->userdata("fms_partner_id");
+		if(!$this->can_manage_person($person['partner_id'], $person['role_id'], $person['user_id'])){
+			show_error('Access Denied: You cannot edit this user.', 403);
 		}
 
-		// Update staff
-		$staff_data = array(
-			'first_name' => $this->input->post('first_name'),
-			'last_name' => $this->input->post('last_name'),
-			'email' => $this->input->post('email'),
-			'partner_id' => $partner_id,
-			'position' => $this->input->post('position'),
-			'status' => $this->input->post('status', TRUE) ?: 'active'
-		);
-
-		$this->fmsm_enhanced->update_staff($user['staff_id'], $staff_data);
-
-		// Update user account
-		$user_data = array(
-			'email' => $this->input->post('email'),
-			'role_id' => $this->input->post('role_id'),
-			'level' => $this->input->post('level', TRUE) ?: 1,
-			'status' => $this->input->post('status', TRUE) ?: 'active'
-		);
-
-		// Update password if provided
-		$password = $this->input->post('password');
-		if(!empty($password)){
-			$user_data['password'] = sha1($password);
+		// Nobody changes their own role or account status
+		$self = (int)$person['user_id'] === (int)$this->session->userdata('fms_user_id');
+		$this->person_rules(!$self, $self ? NULL : array('active', 'inactive', 'suspended'));
+		$this->form_validation->set_rules('password', 'New Password', 'min_length[6]');
+		if($this->form_validation->run() === FALSE){
+			return $this->show_person_form('edit_user', $person);
 		}
 
-		if($this->fmsm_enhanced->update_user($user_id, $user_data)){
-			$this->session->set_flashdata('success', 'User updated successfully.');
-			redirect('users');
-		} else {
-			$this->session->set_flashdata('error', 'Failed to update user.');
-			redirect('editUser/'.$user_id);
+		$staff   = $this->person_staff_data();
+		$role_id = $self ? (int)$person['role_id'] : (int)$this->input->post('role_id');
+		$error   = NULL;
+		if($role_id !== (int)$person['role_id'] && !$this->can_assign_role($role_id)){
+			$error = 'You cannot give that role.';
+		} elseif(!$staff['partner_id'] || !$this->fmsm_enhanced->get_partner_by_id($staff['partner_id'])){
+			$error = 'Please choose a partner institution.';
+		} elseif($this->fmsm_enhanced->email_in_use($staff['email'], $person['staff_id'])){
+			$error = 'This email address is already used by someone else.';
 		}
+		if($error){
+			return $this->show_person_form('edit_user', $person, $error);
+		}
+
+		$status = $self ? $person['status'] : $this->input->post('status');
+		$staff['status'] = $status === 'active' ? 'active' : 'inactive';   // staff records know only active and inactive
+		$account = array('email' => $staff['email'], 'role_id' => $role_id, 'status' => $status);
+		$password = (string)$this->input->post('password');
+		if($password !== ''){
+			$account['password'] = sha1($password);
+		}
+
+		$this->db->trans_start();
+		$this->fmsm_enhanced->update_staff($person['staff_id'], $staff);
+		$this->fmsm_enhanced->update_user($person['user_id'], $account);
+		$this->db->trans_complete();
+		if(!$this->db->trans_status()){
+			return $this->show_person_form('edit_user', $person, 'The changes could not be saved. Please try again.');
+		}
+
+		$this->session->set_flashdata('success', htmlspecialchars($this->person_name($staff)) . ' updated.');
+		redirect('users');
 	}
 
 	public function deleteUser($user_id){
@@ -2285,183 +2322,71 @@ class Fms extends CI_Controller {
 	// ==================== STAFF MANAGEMENT METHODS ====================
 
 	public function newStaff(){
-		// Only admins and coordinators can create staff
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to create staff.', 403);
-		}
-
-		$this->data["title"] = "FMS - New Staff Member";
-
-		// Get all partners for super admin/admin
-		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			$this->data['partners'] = $this->fmsm_enhanced->get_all_partners();
-		}
-
-		$this->load->view('pages/newstaff', $this->data);
+		$this->require_people_manager('create staff');
+		$this->show_person_form('new_staff');
 	}
 
 	public function saveStaff(){
-		// Only admins and coordinators can create staff
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to create staff.', 403);
-		}
-
-		// Validate inputs
-		$this->form_validation->set_rules('first_name', 'First Name', 'required|trim');
-		$this->form_validation->set_rules('last_name', 'Last Name', 'required|trim');
-		$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim|is_unique[staff.email]');
-		$this->form_validation->set_rules('position', 'Position', 'required|trim');
-		$this->form_validation->set_rules('partner_id', 'Partner/Institution', 'required|numeric');
-
-		if($this->form_validation->run() === FALSE){
-			$this->newStaff();
-			return;
-		}
-
-		// Prepare staff data
-		$staff_data = array(
-			'first_name' => $this->input->post('first_name'),
-			'last_name' => $this->input->post('last_name'),
-			'email' => $this->input->post('email'),
-			'phone' => $this->input->post('phone'),
-			'position' => $this->input->post('position'),
-			'department' => $this->input->post('department'),
-			'partner_id' => $this->input->post('partner_id'),
-			'greater_role' => $this->input->post('greater_role'),
-			'employee_number' => $this->input->post('employee_number'),
-			'hire_date' => $this->input->post('hire_date') ? $this->input->post('hire_date') : NULL,
-			'status' => $this->input->post('status') ? $this->input->post('status') : 'active'
-		);
-
-		// Create staff member
-		$staff_id = $this->fmsm_enhanced->create_staff($staff_data);
-		if($staff_id){
-			// Generate temporary password and create login account
-			$chars    = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
-			$tmp_pass = '';
-			for($i = 0; $i < 10; $i++) $tmp_pass .= $chars[random_int(0, strlen($chars) - 1)];
-
-			$email = $this->input->post('email');
-			$user_data = array(
-				'staff_id'              => $staff_id,
-				'email'                 => $email,
-				'password'              => sha1($tmp_pass),
-				'role_id'               => 4, // Member
-				'status'                => 'active',
-				'force_password_change' => 1,
-			);
-
-			if($this->fmsm_enhanced->create_user($user_data)){
-				$full_name  = trim($this->input->post('first_name') . ' ' . $this->input->post('last_name'));
-				$mail_sent  = $this->fms_mailer->account_created($email, $full_name, $tmp_pass, 'Member');
-				if($mail_sent){
-					$this->session->set_flashdata('success', 'Staff member created successfully. A welcome email with login credentials has been sent to ' . htmlspecialchars($email) . '.');
-				} else {
-					$this->session->set_flashdata('success', 'Staff member and login account created (temporary password: <strong>' . htmlspecialchars($tmp_pass) . '</strong>). However, the welcome email could not be sent — please share the password with <strong>' . htmlspecialchars($email) . '</strong> manually.');
-				}
-			} else {
-				// Staff record created but user account failed — still show partial success
-				$this->session->set_flashdata('success', 'Staff member record created. However, the login account could not be created automatically — please use "New User Account" to add login access manually.');
-			}
-			redirect('users');
-		} else {
-			$this->session->set_flashdata('error', 'Failed to create staff member. Please try again.');
-			$this->newStaff();
-		}
+		$this->create_person('new_staff');
 	}
 
 	public function editStaff($staff_id){
-		// Only admins and coordinators can edit staff
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to edit staff.', 403);
-		}
-
-		$this->data["title"] = "FMS - Edit Staff Member";
-
-		// Get staff data
-		$this->data['staff'] = $this->fmsm_enhanced->get_staff_by_id($staff_id);
-
-		if(empty($this->data['staff'])){
+		$this->require_people_manager('edit staff');
+		$person = $this->fmsm_enhanced->get_staff_by_id($staff_id);
+		if(empty($person)){
 			show_404();
 		}
-
-		// Coordinators can only edit staff from their institution
-		if($this->auth_manager->is_coordinator() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_super_admin()){
-			$partner_id = $this->session->userdata('fms_partner_id');
-			if($this->data['staff']['partner_id'] != $partner_id){
-				show_error('Access Denied: You can only edit staff from your institution.', 403);
-			}
+		$account = $this->fmsm_enhanced->get_user_by_staff_id($staff_id);
+		if(!$this->can_manage_person($person['partner_id'], $account ? $account['role_id'] : NULL, $account ? $account['user_id'] : NULL)){
+			show_error('Access Denied: You cannot edit this staff member.', 403);
 		}
-
-		// Get all partners for super admin/admin
-		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
-			$this->data['partners'] = $this->fmsm_enhanced->get_all_partners();
-		}
-
-		$this->load->view('pages/editstaff', $this->data);
+		$person['account'] = $account;
+		$this->show_person_form('edit_staff', $person);
 	}
 
 	public function updateStaff($staff_id){
-		// Only admins and coordinators can update staff
-		if(!$this->auth_manager->is_super_admin() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_coordinator()){
-			show_error('Access Denied: You do not have permission to update staff.', 403);
-		}
-
-		// Get staff data to verify permissions
-		$staff = $this->fmsm_enhanced->get_staff_by_id($staff_id);
-		if(empty($staff)){
+		$this->require_people_manager('update staff');
+		$person = $this->fmsm_enhanced->get_staff_by_id($staff_id);
+		if(empty($person)){
 			show_404();
 		}
-
-		// Coordinators can only edit staff from their institution
-		if($this->auth_manager->is_coordinator() && !$this->auth_manager->is_admin() && !$this->auth_manager->is_super_admin()){
-			$partner_id = $this->session->userdata('fms_partner_id');
-			if($staff['partner_id'] != $partner_id){
-				show_error('Access Denied: You can only edit staff from your institution.', 403);
-			}
+		$account = $this->fmsm_enhanced->get_user_by_staff_id($staff_id);
+		if(!$this->can_manage_person($person['partner_id'], $account ? $account['role_id'] : NULL, $account ? $account['user_id'] : NULL)){
+			show_error('Access Denied: You cannot edit this staff member.', 403);
 		}
+		$person['account'] = $account;
 
-		// Validate inputs
-		$this->form_validation->set_rules('first_name', 'First Name', 'required|trim');
-		$this->form_validation->set_rules('last_name', 'Last Name', 'required|trim');
-		$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim');
-		$this->form_validation->set_rules('position', 'Position', 'required|trim');
-		$this->form_validation->set_rules('partner_id', 'Partner/Institution', 'required|numeric');
-
-		// Check email uniqueness (exclude current staff)
-		$email = $this->input->post('email');
-		if($email != $staff['email']){
-			$this->form_validation->set_rules('email', 'Email', 'required|valid_email|trim|is_unique[staff.email]');
-		}
-
+		$self = $account && (int)$account['user_id'] === (int)$this->session->userdata('fms_user_id');
+		$this->person_rules(FALSE, $self ? NULL : array('active', 'inactive'));
 		if($this->form_validation->run() === FALSE){
-			$this->editStaff($staff_id);
-			return;
+			return $this->show_person_form('edit_staff', $person);
 		}
 
-		// Prepare staff data
-		$staff_data = array(
-			'first_name' => $this->input->post('first_name'),
-			'last_name' => $this->input->post('last_name'),
-			'email' => $this->input->post('email'),
-			'phone' => $this->input->post('phone'),
-			'position' => $this->input->post('position'),
-			'department' => $this->input->post('department'),
-			'partner_id' => $this->input->post('partner_id'),
-			'greater_role' => $this->input->post('greater_role'),
-			'employee_number' => $this->input->post('employee_number'),
-			'hire_date' => $this->input->post('hire_date') ? $this->input->post('hire_date') : NULL,
-			'status' => $this->input->post('status')
-		);
-
-		// Update staff member
-		if($this->fmsm_enhanced->update_staff($staff_id, $staff_data)){
-			$this->session->set_flashdata('success', 'Staff member updated successfully.');
-			redirect('users');
-		} else {
-			$this->session->set_flashdata('error', 'Failed to update staff member. Please try again.');
-			$this->editStaff($staff_id);
+		$staff = $this->person_staff_data();
+		$error = NULL;
+		if(!$staff['partner_id'] || !$this->fmsm_enhanced->get_partner_by_id($staff['partner_id'])){
+			$error = 'Please choose a partner institution.';
+		} elseif($this->fmsm_enhanced->email_in_use($staff['email'], $staff_id)){
+			$error = 'This email address is already used by someone else.';
 		}
+		if($error){
+			return $this->show_person_form('edit_staff', $person, $error);
+		}
+		$staff['status'] = $self ? $person['status'] : $this->input->post('status');
+
+		// The login email follows the staff email, so the two never drift apart
+		$this->db->trans_start();
+		$this->fmsm_enhanced->update_staff($staff_id, $staff);
+		if($account && strcasecmp($account['email'], $staff['email']) !== 0){
+			$this->fmsm_enhanced->update_user($account['user_id'], array('email' => $staff['email']));
+		}
+		$this->db->trans_complete();
+		if(!$this->db->trans_status()){
+			return $this->show_person_form('edit_staff', $person, 'The changes could not be saved. Please try again.');
+		}
+
+		$this->session->set_flashdata('success', htmlspecialchars($this->person_name($staff)) . ' updated.');
+		redirect('users');
 	}
 
 	public function deleteStaff($staff_id){
@@ -3162,7 +3087,7 @@ class Fms extends CI_Controller {
 		// First signature: name, position and organization come from the staff record
 		if(empty($existing['signature_name'])){
 			$user = $this->fmsm_enhanced->get_user_by_id($user_id);
-			$existing['signature_name'] = $user ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+			$existing['signature_name'] = $user ? $this->person_name($user) : '';
 			$existing['position']       = $user ? (string)($user['position'] ?: $user['department']) : '';
 			$existing['organization']   = $user ? (string)$user['partner_name'] : '';
 		}

@@ -282,7 +282,7 @@
                              alt="Signature of <?=htmlspecialchars($timesheet['first_name'].' '.$timesheet['last_name'], ENT_QUOTES);?>"
                              style="max-height:100px;max-width:100%;" />
                         <p class="mb-0 mt-2 small text-muted">
-                          Signed by <?=htmlspecialchars($timesheet['first_name'].' '.$timesheet['last_name']);?><?php
+                          Signed by <?=htmlspecialchars(trim((isset($timesheet['title']) ? $timesheet['title'].' ' : '').$timesheet['first_name'].' '.$timesheet['last_name']));?><?php
                           if(!empty($timesheet['signature_date'])) echo ' on ' . date('F j, Y', strtotime($timesheet['signature_date'])); ?>
                         </p>
                       <?php elseif($is_own_timesheet): ?>

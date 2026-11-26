@@ -148,7 +148,8 @@
 						<tr>
 							<td></td>
 							<td>
-								<strong><?=$user['first_name']." ".$user['last_name'];?></strong>
+								<?php $user_name = trim((isset($user['title']) ? $user['title'].' ' : '').$user['first_name'].' '.$user['last_name']); ?>
+								<strong><?=htmlspecialchars($user_name);?></strong>
 							</td>
 							<td><?=$user['email'];?></td>
 							<td><?=isset($user['partner_name']) ? $user['partner_name'] : 'N/A';?></td>
@@ -161,7 +162,7 @@
 										<i class="ti ti-edit"></i> Edit
 									</a>
 									<?php if($this->auth_manager->is_super_admin() && $user['user_id'] != $this->session->userdata('fms_user_id')): ?>
-									<button type="button" class="btn btn-sm btn-danger" onclick="deleteUser(<?=$user['user_id'];?>, '<?=$user['first_name']." ".$user['last_name'];?>')">
+									<button type="button" class="btn btn-sm btn-danger" onclick="<?=htmlspecialchars('deleteUser(' . (int)$user['user_id'] . ', ' . json_encode($user_name) . ')', ENT_QUOTES);?>">
 										<i class="ti ti-trash"></i> Delete
 									</button>
 									<?php endif; ?>
@@ -213,7 +214,8 @@
                       <tr>
                         <td></td>
                         <td>
-                          <strong><?=$member['first_name']." ".$member['last_name'];?></strong>
+                          <?php $member_name = trim((isset($member['title']) ? $member['title'].' ' : '').$member['first_name'].' '.$member['last_name']); ?>
+                          <strong><?=htmlspecialchars($member_name);?></strong>
                         </td>
                         <td><?=$member['email'];?></td>
                         <td><?=isset($member['partner_name']) ? $member['partner_name'] : 'N/A';?></td>
@@ -227,7 +229,7 @@
                               <i class="ti ti-edit"></i> Edit
                             </a>
                             <?php if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()): ?>
-                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteStaff(<?=$member['staff_id'];?>, '<?=$member['first_name']." ".$member['last_name'];?>')">
+                            <button type="button" class="btn btn-sm btn-danger" onclick="<?=htmlspecialchars('deleteStaff(' . (int)$member['staff_id'] . ', ' . json_encode($member_name) . ')', ENT_QUOTES);?>">
                               <i class="ti ti-trash"></i> Delete
                             </button>
                             <?php endif; ?>

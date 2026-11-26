@@ -5,8 +5,9 @@
 --
 -- WHAT THIS IS
 --   Part 1  SCHEMA: every table, index, AUTO_INCREMENT and foreign key from the
---           export, plus users.email_notifications_enabled and forex_rates.partner_id
---           (each partner keeps its own rates; NULL marks a shared default rate).
+--           export, plus users.email_notifications_enabled, forex_rates.partner_id
+--           (each partner keeps its own rates; NULL marks a shared default rate)
+--           and staff.title (e.g. "Prof. Dr.-Ing.").
 --   Part 2  REFERENCE DATA: roles, work_packages, partners (contact details
 --           removed), system_settings (signature entries removed), forex_rates
 --           (all of them shared default rates, as partner_id is not set).
@@ -303,6 +304,7 @@ CREATE TABLE `roles` (
 -- Table structure for table `staff`
 CREATE TABLE `staff` (
   `staff_id` int NOT NULL,
+  `title` varchar(50) DEFAULT NULL COMMENT 'Title shown before the name, e.g. Prof. Dr.-Ing.',
   `first_name` varchar(100) NOT NULL,
   `last_name` varchar(100) NOT NULL,
   `email` varchar(255) NOT NULL,

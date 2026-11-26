@@ -64,6 +64,7 @@ class Fms_model_enhanced extends CI_Model{
     public function get_all_users($partner_id = NULL){
         $this->db->select("users.*,
             roles.role_name,
+            " . ($this->staff_title_supported() ? 'staff.title,' : '') . "
             staff.first_name,
             staff.last_name,
             staff.email AS staff_email,
@@ -175,6 +176,43 @@ class Fms_model_enhanced extends CI_Model{
     public function update_staff($staff_id, $staff_data){
         $this->db->where('staff_id', $staff_id);
         return $this->db->update('staff', $staff_data);
+    }
+
+    /**
+     * Whether staff.title exists (added by db/database_update.sql, Part 3).
+     * Until it does, titles are not read or saved and everything else works as before.
+     */
+    public function staff_title_supported(){
+        if($this->staff_title_column === NULL){
+            $this->staff_title_column = $this->db->field_exists('title', 'staff');
+        }
+        return $this->staff_title_column;
+    }
+    private $staff_title_column = NULL;
+
+    /**
+     * Whether an email address already belongs to someone: another staff record,
+     * or a login account that is not this staff member's own.
+     */
+    public function email_in_use($email, $except_staff_id = NULL){
+        $this->db->where('LOWER(email)', strtolower(trim($email)));
+        if($except_staff_id){
+            $this->db->where('staff_id !=', (int)$except_staff_id);
+        }
+        if($this->db->count_all_results('staff') > 0){
+            return TRUE;
+        }
+        $this->db->where('LOWER(email)', strtolower(trim($email)));
+        if($except_staff_id){
+            $this->db->where('staff_id !=', (int)$except_staff_id);
+        }
+        return $this->db->count_all_results('users') > 0;
+    }
+
+    /** The login account of a staff member, or NULL if they have none */
+    public function get_user_by_staff_id($staff_id){
+        $row = $this->db->select('user_id, role_id, status, email')->where('staff_id', (int)$staff_id)->get('users')->row_array();
+        return $row ?: NULL;
     }
 
     public function delete_staff($staff_id){
@@ -416,6 +454,7 @@ class Fms_model_enhanced extends CI_Model{
     public function get_timesheet_by_id($timesheet_id){
         return $this->db->select('timesheets.*,
             users.email,
+            ' . ($this->staff_title_supported() ? 'staff.title,' : '') . '
             staff.first_name,
             staff.last_name,
             partners.name AS partner_name')
