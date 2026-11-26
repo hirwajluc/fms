@@ -65,7 +65,6 @@ $current_status = isset($person['status']) ? $person['status'] : 'active';
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/node-waves/node-waves.css" />
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/typeahead-js/typeahead.css" />
     <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/select2/select2.css" />
-    <link rel="stylesheet" href="<?=base_url();?>assets/vendor/libs/flatpickr/flatpickr.css" />
 
     <!-- Page CSS -->
 
@@ -186,7 +185,7 @@ $current_status = isset($person['status']) ? $person['status'] : 'active';
                         </div>
 
                         <div class="col-12">
-                          <h6 class="mt-2 fw-semibold">2. Institution &amp; Professional Details</h6>
+                          <h6 class="mt-2 fw-semibold">2. Institution</h6>
                           <hr class="mt-0" />
                         </div>
 
@@ -205,33 +204,9 @@ $current_status = isset($person['status']) ? $person['status'] : 'active';
                         </div>
 
                         <div class="col-md-6">
-                          <label class="form-label" for="position">Position *</label>
-                          <input type="text" id="position" name="position" class="form-control" maxlength="100"
-                                 placeholder="e.g. Project Coordinator, Lecturer" value="<?=$val('position');?>" required />
-                        </div>
-
-                        <div class="col-md-6">
                           <label class="form-label" for="department">Department</label>
                           <input type="text" id="department" name="department" class="form-control" maxlength="100"
                                  placeholder="e.g. Computer Science, Engineering" value="<?=$val('department');?>" />
-                        </div>
-
-                        <div class="col-md-6">
-                          <label class="form-label" for="greater_role">GREATER Project Role</label>
-                          <input type="text" id="greater_role" name="greater_role" class="form-control" maxlength="50"
-                                 placeholder="e.g. Researcher, Developer" value="<?=$val('greater_role');?>" />
-                        </div>
-
-                        <div class="col-md-6">
-                          <label class="form-label" for="employee_number">Employee Number</label>
-                          <input type="text" id="employee_number" name="employee_number" class="form-control" maxlength="50"
-                                 placeholder="Staff ID/Number" value="<?=$val('employee_number');?>" />
-                        </div>
-
-                        <div class="col-md-6">
-                          <label class="form-label" for="hire_date">Hire Date</label>
-                          <input type="text" id="hire_date" name="hire_date" class="form-control flatpickr"
-                                 placeholder="YYYY-MM-DD" value="<?=$val('hire_date');?>" />
                         </div>
 
                         <div class="col-12">
@@ -254,6 +229,7 @@ $current_status = isset($person['status']) ? $person['status'] : 'active';
                           <div class="form-text">
                             <?php if($self): ?>You cannot change your own role.
                             <?php elseif($this->auth_manager->is_coordinator() && !$admin): ?>Coordinators can give the Member role only.
+                            <?php else: ?>The role says what they do in GREATER FMS: Member, Institution Coordinator, Admin.
                             <?php endif; ?>
                           </div>
                         </div>
@@ -372,8 +348,6 @@ $current_status = isset($person['status']) ? $person['status'] : 'active';
 
     <!-- Vendors JS -->
     <script src="<?=base_url();?>assets/vendor/libs/select2/select2.js"></script>
-    <script src="<?=base_url();?>assets/vendor/libs/moment/moment.js"></script>
-    <script src="<?=base_url();?>assets/vendor/libs/flatpickr/flatpickr.js"></script>
 
     <!-- Main JS -->
     <script src="<?=base_url();?>assets/js/main.js"></script>
@@ -382,7 +356,6 @@ $current_status = isset($person['status']) ? $person['status'] : 'active';
     <script>
     $(document).ready(function() {
       $('.select2').select2();
-      $('.flatpickr').flatpickr({ dateFormat: 'Y-m-d', allowInput: true });
     });
 
     // Title: the buttons add or remove a part in the usual order (Prof. Dr.-Ing.); anything typed is kept

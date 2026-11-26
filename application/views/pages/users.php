@@ -123,7 +123,6 @@
                         <th>Name</th>
                         <th>Email</th>
 						<th>Partner/Institution</th>
-						<th>Position</th>
 						<th>Role</th>
 						<th>Status</th>
                         <th>Actions</th>
@@ -153,7 +152,6 @@
 							</td>
 							<td><?=$user['email'];?></td>
 							<td><?=isset($user['partner_name']) ? $user['partner_name'] : 'N/A';?></td>
-							<td><?=$user['position'];?></td>
 							<td><span class="badge <?=$role_badge;?>"><?=ucwords(str_replace('_', ' ', $user['role_name']));?></span></td>
 							<td><span class="badge <?=$status_badge;?>"><?=ucfirst($user['status']);?></span></td>
 							<td>
@@ -197,9 +195,8 @@
                         <th>Name</th>
                         <th>Email</th>
                         <th>Partner/Institution</th>
-                        <th>Position</th>
                         <th>Department</th>
-                        <th>GREATER Role</th>
+                        <th>Role</th>
                         <th>Status</th>
                         <th>Actions</th>
                       </tr>
@@ -219,9 +216,8 @@
                         </td>
                         <td><?=$member['email'];?></td>
                         <td><?=isset($member['partner_name']) ? $member['partner_name'] : 'N/A';?></td>
-                        <td><?=$member['position'] ? $member['position'] : 'N/A';?></td>
-                        <td><?=$member['department'] ? $member['department'] : 'N/A';?></td>
-                        <td><?=$member['greater_role'] ? $member['greater_role'] : 'N/A';?></td>
+                        <td><?=$member['department'] ? htmlspecialchars($member['department']) : 'N/A';?></td>
+                        <td><?=!empty($member['account_role']) ? htmlspecialchars(ucwords(str_replace('_', ' ', $member['account_role']))) : '<span class="text-muted">No login</span>';?></td>
                         <td><span class="badge <?=$status_badge;?>"><?=ucfirst($member['status']);?></span></td>
                         <td>
                           <div class="btn-group" role="group">

@@ -166,10 +166,6 @@
                           <div class="form-text">Contact an admin to change your login email.</div>
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label">Position</label>
-                          <input type="text" class="form-control bg-light" value="<?=htmlspecialchars($u['position'] ?? '—');?>" disabled />
-                        </div>
-                        <div class="col-md-6">
                           <label class="form-label">Institution</label>
                           <input type="text" class="form-control bg-light" value="<?=htmlspecialchars($u['partner_name'] ?? '—');?>" disabled />
                         </div>

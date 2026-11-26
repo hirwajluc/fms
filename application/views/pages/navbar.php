@@ -56,7 +56,7 @@
                           </div>
                           <div class="flex-grow-1">
                             <span class="fw-semibold d-block"><?=$this->session->userdata("fms_name");?></span>
-                            <small class="text-muted"><?=$this->session->userdata("fms_position");?></small>
+                            <small class="text-muted"><?=htmlspecialchars(ucwords(str_replace('_', ' ', (string)$this->session->userdata("fms_role_name"))));?></small>
                           </div>
                         </div>
                       </a>

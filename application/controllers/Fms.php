@@ -2121,11 +2121,7 @@ class Fms extends CI_Controller {
 		$v->set_rules('last_name', 'Last Name', 'required|trim|max_length[100]');
 		$v->set_rules('email', 'Email Address', 'required|trim|valid_email|max_length[255]');
 		$v->set_rules('phone', 'Phone Number', 'trim|max_length[50]');
-		$v->set_rules('position', 'Position', 'required|trim|max_length[100]');
 		$v->set_rules('department', 'Department', 'trim|max_length[100]');
-		$v->set_rules('greater_role', 'GREATER Project Role', 'trim|max_length[50]');
-		$v->set_rules('employee_number', 'Employee Number', 'trim|max_length[50]');
-		$v->set_rules('hire_date', 'Hire Date', 'trim|regex_match[/^(\d{4}-\d{2}-\d{2})?$/]');
 		if($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin()){
 			$v->set_rules('partner_id', 'Partner/Institution', 'required|is_natural_no_zero');
 		}
@@ -2137,24 +2133,22 @@ class Fms extends CI_Controller {
 		}
 	}
 
-	/** Staff fields from the shared form; coordinators always keep their own partner */
+	/**
+	 * Staff fields from the shared form; coordinators always keep their own partner.
+	 * Position, GREATER role, employee number and hire date are no longer asked for:
+	 * the user role says what someone does. Values already stored are left alone.
+	 */
 	private function person_staff_data(){
 		$post = function($field){
 			$value = trim(preg_replace('/\s+/u', ' ', (string)$this->input->post($field)));
 			return $value === '' ? NULL : $value;
 		};
-		$hire = $post('hire_date');
-		$date = $hire ? DateTime::createFromFormat('Y-m-d', $hire) : FALSE;
 		$data = array(
 			'first_name'      => $post('first_name'),
 			'last_name'       => $post('last_name'),
 			'email'           => $post('email'),
 			'phone'           => $post('phone'),
-			'position'        => $post('position'),
 			'department'      => $post('department'),
-			'greater_role'    => $post('greater_role'),
-			'employee_number' => $post('employee_number'),
-			'hire_date'       => ($date && $date->format('Y-m-d') === $hire) ? $hire : NULL,
 			'partner_id'      => ($this->auth_manager->is_super_admin() || $this->auth_manager->is_admin())
 				? (int)$this->input->post('partner_id') : (int)$this->session->userdata('fms_partner_id'),
 		);
@@ -3088,7 +3082,7 @@ class Fms extends CI_Controller {
 		if(empty($existing['signature_name'])){
 			$user = $this->fmsm_enhanced->get_user_by_id($user_id);
 			$existing['signature_name'] = $user ? $this->person_name($user) : '';
-			$existing['position']       = $user ? (string)($user['position'] ?: $user['department']) : '';
+			$existing['position']       = $user ? (string)($user['position'] ?: ucwords(str_replace('_', ' ', (string)$user['role_name']))) : '';
 			$existing['organization']   = $user ? (string)$user['partner_name'] : '';
 		}
 		$existing['user_id']        = $user_id;

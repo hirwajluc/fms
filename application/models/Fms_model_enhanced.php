@@ -87,7 +87,8 @@ class Fms_model_enhanced extends CI_Model{
     public function get_all_staff($partner_id = NULL){
         $this->db->select("staff.*,
             partners.name AS partner_name,
-            partners.short_name AS partner_short_name")
+            partners.short_name AS partner_short_name,
+            (SELECT r.role_name FROM users u JOIN roles r ON r.role_id = u.role_id WHERE u.staff_id = staff.staff_id LIMIT 1) AS account_role", FALSE)
             ->join("partners", "staff.partner_id=partners.partner_id", "left");
 
         if($partner_id){
