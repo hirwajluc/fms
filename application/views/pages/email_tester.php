@@ -71,6 +71,7 @@
                       </optgroup>
                       <optgroup label="Timesheets">
                         <option value="timesheet_submitted">Timesheet Submitted (admin notification)</option>
+                        <option value="timesheets_submitted">Several Monthly Timesheets Submitted (admin notification)</option>
                         <option value="timesheet_approved">Timesheet Approved (staff notification)</option>
                         <option value="timesheet_rejected">Timesheet Rejected (staff notification)</option>
                       </optgroup>
@@ -130,6 +131,11 @@
                         <tr>
                           <td><span class="badge bg-label-secondary">timesheet_submitted</span></td>
                           <td>Staff submits a timesheet</td>
+                          <td>Admins &amp; coordinators</td>
+                        </tr>
+                        <tr>
+                          <td><span class="badge bg-label-secondary">timesheets_submitted</span></td>
+                          <td>Staff submits entries spanning several months (one timesheet per month)</td>
                           <td>Admins &amp; coordinators</td>
                         </tr>
                         <tr>

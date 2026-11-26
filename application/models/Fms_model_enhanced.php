@@ -476,6 +476,17 @@ class Fms_model_enhanced extends CI_Model{
         return $this->db->insert_id();
     }
 
+    /** user_id, year, month, timesheet_id and status of every timesheet these users have */
+    public function get_timesheet_months($user_ids){
+        $user_ids = array_values(array_unique(array_filter(array_map('intval', (array)$user_ids))));
+        if(!$user_ids){
+            return array();
+        }
+        return $this->db->select('timesheet_id, user_id, year, month, status')
+                       ->where_in('user_id', $user_ids)
+                       ->get('timesheets')->result_array();
+    }
+
     public function get_timesheet_by_month($user_id, $year, $month){
         return $this->db->where('user_id', $user_id)
                        ->where('year', $year)

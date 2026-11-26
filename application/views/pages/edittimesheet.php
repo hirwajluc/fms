@@ -110,15 +110,15 @@
 
                         <div class="col-md-6">
                           <label class="form-label">Name</label>
-                          <input type="text" class="form-control" value="<?=isset($user) ? $user['first_name'].' '.$user['last_name'] : '';?>" disabled />
+                          <input type="text" class="form-control" value="<?=htmlspecialchars(trim(($timesheet['first_name'] ?? '').' '.($timesheet['last_name'] ?? '')));?>" disabled />
                         </div>
 
                         <div class="col-md-6">
                           <label class="form-label">Organization</label>
-                          <input type="text" class="form-control" value="<?=isset($partner_name) ? $partner_name : '';?>" disabled />
+                          <input type="text" class="form-control" value="<?=htmlspecialchars($timesheet['partner_name'] ?? '');?>" disabled />
                         </div>
 
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                           <label class="form-label" for="staff_category">Category of Staff *</label>
                           <select id="staff_category" name="staff_category" class="form-select" required>
                             <option value="">Select Category</option>
@@ -130,20 +130,11 @@
                           </select>
                         </div>
 
-                        <div class="col-md-4">
-                          <label class="form-label">Year</label>
-                          <input type="text" class="form-control" value="<?php
-                            $months = array(1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April', 5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August', 9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December');
-                            echo $timesheet['year'];
-                          ?>" disabled />
-                        </div>
-
-                        <div class="col-md-4">
-                          <label class="form-label">Month</label>
-                          <input type="text" class="form-control" value="<?php
-                            $month_name = isset($months[$timesheet['month']]) ? $months[$timesheet['month']] : $timesheet['month'];
-                            echo $month_name;
-                          ?>" disabled />
+                        <?php $period_label = date('F Y', mktime(0, 0, 0, (int)$timesheet['month'], 1, (int)$timesheet['year'])); ?>
+                        <div class="col-md-6">
+                          <label class="form-label" for="periodDisplay">Period</label>
+                          <input type="text" id="periodDisplay" class="form-control" value="<?=htmlspecialchars($period_label);?>" readonly tabindex="-1" />
+                          <div class="form-text">Set by the dates of the entries. A timesheet covers one month.</div>
                         </div>
 
                         <div class="col-12">
@@ -186,8 +177,12 @@
                           </div>
                         </div>
 
+                        <div class="col-12" id="monthNote" style="display: none;">
+                          <div class="alert mb-0" role="alert" id="monthNoteText"></div>
+                        </div>
+
                         <div class="col-12">
-                          <button type="submit" class="btn btn-primary">
+                          <button type="submit" class="btn btn-primary" id="submitTimesheet">
                             <i class="ti ti-save me-1"></i> Update & Resubmit Timesheet
                           </button>
                           <a href="<?=base_url();?>timesheets" class="btn btn-secondary">
@@ -258,27 +253,87 @@
     <!-- Page JS -->
     <script>
     let entryCounter = 0;
-    let excelEntries = [];
+
+    // A timesheet covers one month; the month follows the entry dates
+    const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const takenMonths = <?=json_encode((object)($taken_months ?? array()), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
+    const baseUrl = <?=json_encode(base_url(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
+    const originalKey = <?=json_encode(sprintf('%04d-%02d', $timesheet['year'], $timesheet['month']));?>;
+    const originalLabel = <?=json_encode($period_label, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
+    const savedEntries = <?=json_encode(array_map(function($d){
+      return array(
+        'date'  => date('Y-m-d', strtotime($d['date'])),
+        'hours' => (string)$d['hours'],
+        'wp'    => (string)$d['work_package'],
+        'desc'  => (string)$d['activity_description'],
+      );
+    }, $timesheet_details ?? array()), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
 
     $(document).ready(function() {
       $('.select2').select2();
 
-      // Load existing entries
-      <?php if(!empty($timesheet_details)): ?>
-        <?php foreach($timesheet_details as $detail): ?>
-          addEntryWithData(
-            '<?=date('Y-m-d', strtotime($detail['date']));?>',
-            '<?=$detail['hours'];?>',
-            '<?=$detail['work_package'];?>',
-            '<?=addslashes($detail['activity_description']);?>'
-          );
-        <?php endforeach; ?>
-      <?php else: ?>
-        // Add initial empty entry if no existing data
+      // Load existing entries (an empty row if there are none)
+      if (savedEntries.length) {
+        savedEntries.forEach(function(e) { addEntryWithData(e.date, e.hours, e.wp, e.desc); });
+      } else {
         addEntry();
-      <?php endif; ?>
-
+      }
+      $('#entriesBody').on('input change', 'input', refreshPeriod);
+      refreshPeriod();
     });
+
+    function joinLabels(labels) {
+      return labels.length > 1 ? labels.slice(0, -1).join(', ') + ' and ' + labels[labels.length - 1] : (labels[0] || '');
+    }
+
+    function groupByMonth() {
+      const hours = {};
+      $('#entriesBody tr').each(function() {
+        const date = $(this).find('input[name="entry_date[]"]').val() || '';
+        const h = parseFloat($(this).find('.entry-hours').val()) || 0;
+        if (!(h > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        hours[date.slice(0, 7)] = (hours[date.slice(0, 7)] || 0) + h;
+      });
+      return Object.keys(hours).sort().map(function(key) {
+        return { key: key, label: MONTH_NAMES[parseInt(key.slice(5), 10) - 1] + ' ' + key.slice(0, 4) };
+      });
+    }
+
+    // Keeps the Period box in step with the dates and stops a save that would break the one-month rule
+    function refreshPeriod() {
+      const months = groupByMonth();
+      const $note = $('#monthNoteText').removeClass('alert-danger alert-info').empty();
+      let problem = false;
+
+      if (!months.length) {
+        $('#periodDisplay').val(originalLabel);
+      } else if (months.length === 1) {
+        const m = months[0];
+        const other = takenMonths[m.key];
+        $('#periodDisplay').val(m.label);
+        if (other) {
+          problem = true;
+          const editable = other.status === 'draft' || other.status === 'rejected';
+          $note.addClass('alert-danger')
+            .append(document.createTextNode('There is already another timesheet for ' + m.label + ' ('))
+            .append($('<a target="_blank" rel="noopener"></a>')
+              .attr('href', baseUrl + (editable ? 'editTimesheet/' : 'viewTimesheet/') + other.id)
+              .text('open it'))
+            .append(document.createTextNode('). Change that one instead, or keep these dates in ' + originalLabel + '.'));
+        } else if (m.key !== originalKey) {
+          $note.addClass('alert-info').text('The dates are now in ' + m.label + ', so this timesheet will move from ' + originalLabel + ' to ' + m.label + ' when you save.');
+        }
+      } else {
+        problem = true;
+        $('#periodDisplay').val(months[0].label + ' – ' + months[months.length - 1].label + ' (' + months.length + ' months)');
+        $note.addClass('alert-danger').text('A timesheet covers one month, but these dates fall in '
+          + joinLabels(months.map(function(m) { return m.label; }))
+          + '. Keep one month here and add the other dates with New Timesheet.');
+      }
+
+      $('#monthNote').toggle($note.text() !== '');
+      $('#submitTimesheet').prop('disabled', problem);
+    }
 
     function addEntry() {
       entryCounter++;
@@ -319,42 +374,14 @@
       calculateTotal();
     }
 
+    // Values are set with .val(), so quotes or markup in a description can't break the page
     function addEntryWithData(date, hours, workPackage, description) {
-      entryCounter++;
-
-      const row = `
-        <tr id="entry_${entryCounter}">
-          <td class="text-center">${entryCounter}</td>
-          <td>
-            <input type="date" name="entry_date[]" class="form-control form-control-sm" value="${date}" required />
-          </td>
-          <td>
-            <input type="number" name="entry_hours[]" class="form-control form-control-sm entry-hours" min="0" step="0.01" value="${hours}" required onchange="calculateTotal()" />
-          </td>
-          <td>
-            <select name="entry_work_package[]" class="form-select form-select-sm" required>
-              <option value="">Select WP</option>
-              <option value="WP1" ${workPackage === 'WP1' ? 'selected' : ''}>WP1 - Management and coordination</option>
-              <option value="WP2" ${workPackage === 'WP2' ? 'selected' : ''}>WP2 - Collaboration design</option>
-              <option value="WP3" ${workPackage === 'WP3' ? 'selected' : ''}>WP3 - Infrastructures</option>
-              <option value="WP4" ${workPackage === 'WP4' ? 'selected' : ''}>WP4 - Curricula design</option>
-              <option value="WP5" ${workPackage === 'WP5' ? 'selected' : ''}>WP5 - Training and coaching</option>
-              <option value="WP6" ${workPackage === 'WP6' ? 'selected' : ''}>WP6 - Transfer methodologies</option>
-              <option value="WP7" ${workPackage === 'WP7' ? 'selected' : ''}>WP7 - Impact and dissemination</option>
-            </select>
-          </td>
-          <td>
-            <input type="text" name="entry_description[]" class="form-control form-control-sm" value="${description}" placeholder="Describe work done..." />
-          </td>
-          <td class="text-center">
-            <button type="button" class="btn btn-sm btn-danger" onclick="removeEntry(${entryCounter})">
-              <i class="ti ti-trash"></i>
-            </button>
-          </td>
-        </tr>
-      `;
-
-      $('#entriesBody').append(row);
+      addEntry();
+      const $row = $('#entry_' + entryCounter);
+      $row.find('input[name="entry_date[]"]').val(date);
+      $row.find('input[name="entry_hours[]"]').val(hours);
+      $row.find('select[name="entry_work_package[]"]').val(workPackage);
+      $row.find('input[name="entry_description[]"]').val(description);
       calculateTotal();
     }
 
@@ -362,6 +389,7 @@
       $('#entry_' + id).remove();
       calculateTotal();
       renumberEntries();
+      refreshPeriod();
     }
 
     function renumberEntries() {
@@ -381,6 +409,13 @@
 
     // Form validation before submit
     $('#editTimesheetForm').on('submit', function(e) {
+      refreshPeriod();
+      if ($('#submitTimesheet').prop('disabled')) {
+        e.preventDefault();
+        alert($('#monthNoteText').text());
+        return false;
+      }
+
       const entryCount = $('#entriesBody tr').length;
       if (entryCount === 0) {
         e.preventDefault();

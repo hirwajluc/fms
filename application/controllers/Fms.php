@@ -114,12 +114,53 @@ class Fms extends CI_Controller {
 		}
 
 		// Coordinators can create timesheets on behalf of their staff
+		$user_ids = array((int)$user_id);
 		if($this->auth_manager->is_coordinator()){
 			$partner_id = $this->session->userdata('fms_partner_id');
 			$this->data['staff_users'] = $this->fmsm_enhanced->get_all_users($partner_id);
+			foreach($this->data['staff_users'] as $su){
+				$user_ids[] = (int)$su['user_id'];
+			}
 		}
 
+		// Months that already have a timesheet, per person, so the form can say so before submitting
+		$taken = array();
+		foreach($this->fmsm_enhanced->get_timesheet_months($user_ids) as $row){
+			$taken[(int)$row['user_id']][sprintf('%04d-%02d', $row['year'], $row['month'])] = array(
+				'id'     => (int)$row['timesheet_id'],
+				'status' => $row['status'],
+			);
+		}
+		$this->data['taken_months'] = $taken;
+		$this->data['own_user_id']  = (int)$user_id;
+
 		$this->load->view('pages/newtimesheet', $this->data);
+	}
+
+	/**
+	 * A spreadsheet cell as plain data: text (rich text and inline strings included) or a number.
+	 * Formulas give their result. PhpSpreadsheet returns rich text as an object, which would
+	 * otherwise reach the browser as "[object Object]".
+	 */
+	private function excel_cell($worksheet, $coord){
+		$cell = $worksheet->getCell($coord);
+		try {
+			$value = $cell->getCalculatedValue();
+		} catch(\Throwable $e) {
+			$value = $cell->getOldCalculatedValue();
+			if($value === null){
+				$value = $cell->getValue();
+			}
+		}
+		if($value instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText){
+			$value = $value->getPlainText();
+		}
+		if(is_string($value)){
+			$value = trim($value);
+		} elseif(is_object($value)){
+			$value = method_exists($value, '__toString') ? trim((string)$value) : '';
+		}
+		return $value;
 	}
 
 	public function parseTimesheetExcel(){
@@ -205,36 +246,46 @@ class Fms extends CI_Controller {
 
 			log_message('info', 'Using worksheet: ' . $worksheet->getTitle());
 
+			// Staff details and the table header are found by their labels in column A,
+			// so a sheet whose rows are shifted (an extra title row, logos above) still works.
+			// Template: A7 Employee / A8 Organization / A9 Staff category (values in C), header in row 12.
+			$header_row = 0;
 			try {
-				// Extract staff information from the sheet
-				// Based on the GREATER template structure
-				$staff_info['name'] = $worksheet->getCell('B4')->getValue();
-				$staff_info['organization'] = $worksheet->getCell('B5')->getValue();
-				$staff_info['staff_category'] = $worksheet->getCell('B6')->getValue();
-
-				log_message('info', 'Staff info extracted - Name: ' . $staff_info['name'] . ', Org: ' . $staff_info['organization'] . ', Category: ' . $staff_info['staff_category']);
-			} catch(Exception $e) {
+				for($r = 1; $r <= 30; $r++){
+					$label = strtolower((string)$this->excel_cell($worksheet, 'A' . $r));
+					$value = $this->excel_cell($worksheet, 'C' . $r);
+					if($label === 'employee' || $label === 'name'){
+						$staff_info['name'] = $value;
+					} elseif(strpos($label, 'organi') === 0){
+						$staff_info['organization'] = $value;
+					} elseif(strpos($label, 'staff category') === 0 || strpos($label, 'category of staff') === 0){
+						$staff_info['staff_category'] = $value;
+					} elseif(strpos($label, 'hours') !== false
+					         && stripos((string)$this->excel_cell($worksheet, 'B' . $r), 'date') === 0){
+						$header_row = $r;
+						break;
+					}
+				}
+				log_message('info', 'Staff info extracted - Name: ' . ($staff_info['name'] ?? '') . ', Org: ' . ($staff_info['organization'] ?? '') . ', Category: ' . ($staff_info['staff_category'] ?? ''));
+			} catch(\Throwable $e) {
 				log_message('error', 'Error extracting staff info: ' . $e->getMessage());
 				// Continue anyway - staff info is optional
 			}
 
-			// Check the header row to verify column structure
-			log_message('info', 'Header check - A12=' . $worksheet->getCell('A12')->getValue() . ', B12=' . $worksheet->getCell('B12')->getValue() . ', C12=' . $worksheet->getCell('C12')->getValue() . ', D12=' . $worksheet->getCell('D12')->getValue());
-
-			// Daily entries in the template start from row 13 (after the headers)
-			// Correct column mapping based on actual Excel structure:
+			// Daily entries start right after the header row (row 13 in the template)
 			// A=Total hours, B=Date (dd/mm/yyyy), C=Work Package, D=Comments
-			$row = 13;
-			$max_rows = 200; // Safety limit
+			$row = $header_row ? $header_row + 1 : 13;
+			$max_rows = $row + 200; // Safety limit
 
 			log_message('info', 'Starting to parse daily entries from row ' . $row);
 
 			while($row < $max_rows){
 				try {
-					$total_hours = $worksheet->getCell('A' . $row)->getValue();
-					$date_cell = $worksheet->getCell('B' . $row)->getValue();
-					$work_package = $worksheet->getCell('C' . $row)->getValue();
-					$comments = $worksheet->getCell('D' . $row)->getValue();
+					// Plain values: rich text and inline strings become text, formulas their result
+					$total_hours = $this->excel_cell($worksheet, 'A' . $row);
+					$date_cell = $this->excel_cell($worksheet, 'B' . $row);
+					$work_package = $this->excel_cell($worksheet, 'C' . $row);
+					$comments = $this->excel_cell($worksheet, 'D' . $row);
 
 					// Log raw values for debugging
 					$comments_preview = is_string($comments) ? substr($comments, 0, 50) : (string)$comments;
@@ -391,10 +442,90 @@ class Fms extends CI_Controller {
 		}
 	}
 
+	/** "October 2025" */
+	private function month_label($year, $month){
+		return date('F Y', mktime(0, 0, 0, (int)$month, 1, (int)$year));
+	}
+
+	/** "A", "A and B", "A, B and C" */
+	private function join_labels($labels){
+		$last = array_pop($labels);
+		return $labels ? implode(', ', $labels) . ' and ' . $last : (string)$last;
+	}
+
+	/**
+	 * Reads the daily entries posted by the timesheet forms and groups them by month,
+	 * because a timesheet covers one month and the month comes from the entry dates.
+	 * Rows without hours are skipped, as before.
+	 * Returns ['months' => ['2025-10' => ['year', 'month', 'label', 'hours', 'entries'], ...]]
+	 * in date order, or ['error' => message].
+	 */
+	private function timesheet_entries_by_month(){
+		$dates = (array)$this->input->post('entry_date');
+		$hours = (array)$this->input->post('entry_hours');
+		$wps   = (array)$this->input->post('entry_work_package');
+		$notes = (array)$this->input->post('entry_description');
+
+		$months = array();
+		$n = 0;
+		foreach($dates as $i => $raw){
+			$n++;
+			$h = isset($hours[$i]) && is_numeric($hours[$i]) ? round((float)$hours[$i], 2) : 0;
+			if($h <= 0){
+				continue;
+			}
+			$raw  = trim((string)$raw);
+			$date = DateTime::createFromFormat('!Y-m-d', $raw);
+			if(!$date || $date->format('Y-m-d') !== $raw){
+				return array('error' => 'Entry ' . $n . ' needs a valid date.');
+			}
+			$wp = isset($wps[$i]) ? trim((string)$wps[$i]) : '';
+			if($wp === ''){
+				return array('error' => 'Entry ' . $n . ' (' . $date->format('d/m/Y') . ') needs a work package.');
+			}
+			$key = $date->format('Y-m');
+			if(!isset($months[$key])){
+				$months[$key] = array(
+					'year'    => (int)$date->format('Y'),
+					'month'   => (int)$date->format('n'),
+					'label'   => $date->format('F Y'),
+					'hours'   => 0,
+					'entries' => array(),
+				);
+			}
+			$months[$key]['hours'] = round($months[$key]['hours'] + $h, 2);
+			$months[$key]['entries'][] = array(
+				'date'                 => $raw,
+				'hours'                => $h,
+				'work_package'         => $wp,
+				'activity_description' => isset($notes[$i]) ? trim((string)$notes[$i]) : '',
+			);
+		}
+		ksort($months);
+		foreach($months as &$m){
+			usort($m['entries'], function($a, $b){ return strcmp($a['date'], $b['date']); });
+		}
+		unset($m);
+		return array('months' => $months);
+	}
+
+	/** The months a user already has timesheets for: ['2025-10' => ['id' => 12, 'status' => 'approved'], ...] */
+	private function taken_timesheet_months($user_id, $except_timesheet_id = 0){
+		$taken = array();
+		foreach($this->fmsm_enhanced->get_timesheet_months(array((int)$user_id)) as $row){
+			if((int)$row['timesheet_id'] === (int)$except_timesheet_id){
+				continue;
+			}
+			$taken[sprintf('%04d-%02d', $row['year'], $row['month'])] = array(
+				'id'     => (int)$row['timesheet_id'],
+				'status' => $row['status'],
+			);
+		}
+		return $taken;
+	}
+
 	public function saveTimesheet(){
-		// Validate inputs
-		$this->form_validation->set_rules('year', 'Year', 'required');
-		$this->form_validation->set_rules('month', 'Month', 'required');
+		// Validate inputs (the month comes from the entry dates)
 		$this->form_validation->set_rules('staff_category', 'Staff Category', 'required');
 
 		if($this->form_validation->run() == FALSE){
@@ -420,91 +551,92 @@ class Fms extends CI_Controller {
 			}
 		}
 
-		// Check if timesheet already exists for this user/month/year
-		$existing = $this->fmsm_enhanced->get_timesheet_by_month($user_id, $this->input->post('year'), $this->input->post('month'));
-
-		if($existing){
-			$this->session->set_flashdata('error', 'A timesheet for this month already exists. Please edit the existing timesheet instead.');
+		// Daily entries, grouped by month: one timesheet per month
+		$grouped = $this->timesheet_entries_by_month();
+		if(isset($grouped['error'])){
+			$this->session->set_flashdata('error', htmlspecialchars($grouped['error']));
+			redirect('newTimesheet');
+			return;
+		}
+		$months = $grouped['months'];
+		if(!$months){
+			$this->session->set_flashdata('error', 'Please add at least one daily entry with hours.');
 			redirect('newTimesheet');
 			return;
 		}
 
-		// Get daily entries from POST data
-		$dates = $this->input->post('entry_date');
-		$hours = $this->input->post('entry_hours');
-		$work_packages = $this->input->post('entry_work_package');
-		$descriptions = $this->input->post('entry_description');
-
-		// Validate that we have at least one entry
-		if(empty($dates) || !is_array($dates) || count($dates) == 0){
-			$this->session->set_flashdata('error', 'Please add at least one daily entry.');
+		// A month that already has a timesheet is edited there, not submitted twice
+		$taken = array_intersect_key($months, $this->taken_timesheet_months($user_id));
+		if($taken){
+			$labels = array_column($taken, 'label');
+			$this->session->set_flashdata('error', (count($labels) === 1
+				? 'There is already a timesheet for ' . $labels[0] . '. '
+				: 'There are already timesheets for ' . $this->join_labels($labels) . '. ')
+				. 'Change the existing one instead, or remove those dates here. Nothing was saved.');
 			redirect('newTimesheet');
 			return;
 		}
 
-		// Start transaction
-		$this->db->trans_start();
-
-		// Create timesheet record
-		$timesheet_data = array(
-			'user_id' => $user_id,
-			'partner_id' => $user['partner_id'],
-			'year' => $this->input->post('year'),
-			'month' => $this->input->post('month'),
-			'staff_category' => $this->input->post('staff_category'),
-			'total_hours' => 0, // Will be calculated from details
-			'status' => 'submitted',
-			'submitted_at' => date('Y-m-d H:i:s')
-		);
 		// Signed with the staff member's signature from Settings, if they have one
 		$signature = $this->user_signature_path($user_id);
-		if($signature){
-			$timesheet_data['signature_image'] = $signature;
-			$timesheet_data['signature_date']  = date('Y-m-d H:i:s');
-		}
+		$now = date('Y-m-d H:i:s');
+		$created = array();
 
-		$timesheet_id = $this->fmsm_enhanced->create_timesheet($timesheet_data);
-
-		if($timesheet_id){
-			// Save daily entries
-			$total_hours = 0;
-			foreach($dates as $index => $date){
-				if(!empty($date) && !empty($hours[$index]) && $hours[$index] > 0){
-					$entry_hours = round((float)$hours[$index], 2);
-					$detail_data = array(
-						'timesheet_id' => $timesheet_id,
-						'date' => $date,
-						'hours' => $entry_hours,
-						'work_package' => $work_packages[$index],
-						'activity_description' => $descriptions[$index]
-					);
-					$this->fmsm_enhanced->save_timesheet_detail($detail_data);
-					$total_hours += $entry_hours;
-				}
+		$this->db->trans_start();
+		foreach($months as $m){
+			$timesheet_data = array(
+				'user_id'        => $user_id,
+				'partner_id'     => $user['partner_id'],
+				'year'           => $m['year'],
+				'month'          => $m['month'],
+				'staff_category' => $this->input->post('staff_category'),
+				'total_hours'    => $m['hours'],
+				'status'         => 'submitted',
+				'submitted_at'   => $now
+			);
+			if($signature){
+				$timesheet_data['signature_image'] = $signature;
+				$timesheet_data['signature_date']  = $now;
 			}
-
-			// Update timesheet with calculated total hours
-			$this->fmsm_enhanced->update_timesheet($timesheet_id, array('total_hours' => $total_hours));
+			$timesheet_id = $this->fmsm_enhanced->create_timesheet($timesheet_data);
+			if(!$timesheet_id){
+				break;
+			}
+			foreach($m['entries'] as $entry){
+				$entry['timesheet_id'] = $timesheet_id;
+				$this->fmsm_enhanced->save_timesheet_detail($entry);
+			}
+			$created[] = $timesheet_id;
 		}
-
-		// Complete transaction
 		$this->db->trans_complete();
 
-		if($this->db->trans_status() === FALSE){
+		if($this->db->trans_status() === FALSE || count($created) !== count($months)){
 			$this->session->set_flashdata('error', 'Failed to save timesheet to database.');
 			redirect('newTimesheet');
-		} else {
-			// Notify coordinators and admins of new submission
-			$timesheet_row = $this->fmsm_enhanced->get_timesheet_by_id($timesheet_id);
-			$submitter_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
-			$admin_emails = $this->fmsm_enhanced->get_admin_emails();
-			$coord_emails = $this->fmsm_enhanced->get_coordinator_emails($user['partner_id'] ?? 0);
-			$recipients   = array_unique(array_merge($admin_emails, $coord_emails));
-			if($timesheet_row) $this->fms_mailer->timesheet_submitted($timesheet_row, $submitter_name, $recipients);
-
-			$this->session->set_flashdata('success', 'Timesheet submitted successfully and pending approval.');
-			redirect('timesheets');
+			return;
 		}
+
+		// Notify coordinators and admins: one email for the whole submission
+		$rows = array();
+		foreach($created as $id){
+			$row = $this->fmsm_enhanced->get_timesheet_by_id($id);
+			if($row) $rows[] = $row;
+		}
+		$submitter_name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+		$admin_emails = $this->fmsm_enhanced->get_admin_emails();
+		$coord_emails = $this->fmsm_enhanced->get_coordinator_emails($user['partner_id'] ?? 0);
+		$recipients   = array_unique(array_merge($admin_emails, $coord_emails));
+		if(count($rows) === 1){
+			$this->fms_mailer->timesheet_submitted($rows[0], $submitter_name, $recipients);
+		} elseif($rows){
+			$this->fms_mailer->timesheets_submitted($rows, $submitter_name, $recipients);
+		}
+
+		$labels = array_column($months, 'label');
+		$this->session->set_flashdata('success', count($labels) === 1
+			? 'Timesheet for ' . $labels[0] . ' submitted and pending approval.'
+			: count($labels) . ' monthly timesheets submitted (' . $labels[0] . ' to ' . end($labels) . ') and pending approval.');
+		redirect('timesheets');
 	}
 
 	public function approveTimesheet($timesheet_id){
@@ -1080,6 +1212,8 @@ class Fms extends CI_Controller {
 		$this->data["title"] = "FMS - Edit Timesheet";
 		$this->data['timesheet'] = $timesheet;
 		$this->data['timesheet_details'] = $timesheet_details;
+		// The month follows the dates; other months this person already has can't be reused
+		$this->data['taken_months'] = $this->taken_timesheet_months($timesheet['user_id'], $timesheet_id);
 
 		$this->load->view('pages/edittimesheet', $this->data);
 	}
@@ -1098,35 +1232,51 @@ class Fms extends CI_Controller {
 			show_error('Access Denied: You can only update your own timesheets.', 403);
 		}
 
-		// Get entry data
-		$entry_dates = $this->input->post('entry_date');
-		$entry_hours = $this->input->post('entry_hours');
-		$entry_work_packages = $this->input->post('entry_work_package');
-		$entry_descriptions = $this->input->post('entry_description');
-
-		// Validate entries
-		if(empty($entry_dates) || !is_array($entry_dates)){
-			$this->session->set_flashdata('error', 'Please add at least one daily entry.');
-			redirect('editTimesheet/' . $timesheet_id);
+		// Same rule as the edit page: submitted and approved timesheets are not changed
+		if($timesheet['status'] != 'draft' && $timesheet['status'] != 'rejected'){
+			$this->session->set_flashdata('error', 'You can only edit timesheets that are in draft or rejected status.');
+			redirect('timesheets');
 			return;
 		}
 
-		// Calculate total hours
-		$total_hours = 0;
-		foreach($entry_hours as $hours){
-			$total_hours += round(floatval($hours), 2);
+		// Daily entries; a timesheet covers one month, taken from the dates
+		$back = 'editTimesheet/' . $timesheet_id;
+		$grouped = $this->timesheet_entries_by_month();
+		if(isset($grouped['error'])){
+			$this->session->set_flashdata('error', htmlspecialchars($grouped['error']));
+			redirect($back);
+			return;
 		}
-
-		if($total_hours == 0){
-			$this->session->set_flashdata('error', 'Total hours cannot be 0.');
-			redirect('editTimesheet/' . $timesheet_id);
+		$months = $grouped['months'];
+		if(!$months){
+			$this->session->set_flashdata('error', 'Please add at least one daily entry with hours.');
+			redirect($back);
+			return;
+		}
+		if(count($months) > 1){
+			$this->session->set_flashdata('error', 'A timesheet covers one month, but these dates fall in '
+				. $this->join_labels(array_column($months, 'label'))
+				. '. Keep one month here and add the other dates with New Timesheet.');
+			redirect($back);
+			return;
+		}
+		$m = reset($months);
+		$key = sprintf('%04d-%02d', $m['year'], $m['month']);
+		$taken = $this->taken_timesheet_months($timesheet['user_id'], $timesheet_id);
+		if(isset($taken[$key])){
+			$this->session->set_flashdata('error', 'There is already another timesheet for ' . $m['label']
+				. '. Change that one instead, or keep this timesheet\'s dates in '
+				. $this->month_label($timesheet['year'], $timesheet['month']) . '.');
+			redirect($back);
 			return;
 		}
 
 		// Update timesheet header
 		$timesheet_data = array(
+			'year' => $m['year'],
+			'month' => $m['month'],
 			'staff_category' => $this->input->post('staff_category'),
-			'total_hours' => $total_hours,
+			'total_hours' => $m['hours'],
 			'status' => 'submitted',
 			'submitted_at' => date('Y-m-d H:i:s')
 		);
@@ -1137,33 +1287,22 @@ class Fms extends CI_Controller {
 			$timesheet_data['signature_date']  = date('Y-m-d H:i:s');
 		}
 
-		if($this->fmsm_enhanced->update_timesheet($timesheet_id, $timesheet_data)){
-			// Delete existing details
-			$this->fmsm_enhanced->delete_timesheet_details($timesheet_id);
-
-			// Insert updated details
-			for($i = 0; $i < count($entry_dates); $i++){
-				if(empty($entry_dates[$i]) || empty($entry_hours[$i]) || empty($entry_work_packages[$i])){
-					continue;
-				}
-
-				$detail_data = array(
-					'timesheet_id' => $timesheet_id,
-					'date' => date('Y-m-d', strtotime($entry_dates[$i])),
-					'hours' => round(floatval($entry_hours[$i]), 2),
-					'work_package' => $entry_work_packages[$i],
-					'activity_description' => $entry_descriptions[$i]
-				);
-
-				$this->fmsm_enhanced->save_timesheet_detail($detail_data);
-			}
-
-			$this->session->set_flashdata('success', 'Timesheet updated and resubmitted successfully.');
-			redirect('timesheets');
-		} else {
-			$this->session->set_flashdata('error', 'Failed to update timesheet.');
-			redirect('editTimesheet/' . $timesheet_id);
+		$this->db->trans_start();
+		$this->fmsm_enhanced->update_timesheet($timesheet_id, $timesheet_data);
+		$this->fmsm_enhanced->delete_timesheet_details($timesheet_id);
+		foreach($m['entries'] as $entry){
+			$entry['timesheet_id'] = $timesheet_id;
+			$this->fmsm_enhanced->save_timesheet_detail($entry);
 		}
+		$this->db->trans_complete();
+
+		if($this->db->trans_status() === FALSE){
+			$this->session->set_flashdata('error', 'Failed to update timesheet.');
+			redirect($back);
+			return;
+		}
+		$this->session->set_flashdata('success', 'Timesheet for ' . $m['label'] . ' updated and resubmitted.');
+		redirect('timesheets');
 	}
 
 	public function newExpense(){
@@ -4059,6 +4198,12 @@ class Fms extends CI_Controller {
 				$ok = $this->fms_mailer->account_created($to, 'John Doe', 'Temp@1234', 'Member'); break;
 			case 'timesheet_submitted':
 				$ok = $this->fms_mailer->timesheet_submitted($mock_ts, 'Jane Smith', [$to]); break;
+			case 'timesheets_submitted':
+				$mock_many = [];
+				foreach([[10, 2025, 52], [11, 2025, 4], [12, 2025, 4]] as $i => $p){
+					$mock_many[] = array_merge($mock_ts, ['timesheet_id' => $i + 1, 'month' => $p[0], 'year' => $p[1], 'total_hours' => $p[2]]);
+				}
+				$ok = $this->fms_mailer->timesheets_submitted($mock_many, 'Jane Smith', [$to]); break;
 			case 'timesheet_approved':
 				$ok = $this->fms_mailer->timesheet_approved($mock_ts, $to, 'Jane Smith'); break;
 			case 'timesheet_rejected':

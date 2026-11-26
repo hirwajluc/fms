@@ -136,7 +136,7 @@
                           <input type="text" class="form-control" value="<?=isset($partner_name) ? htmlspecialchars($partner_name) : '';?>" disabled />
                         </div>
 
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                           <label class="form-label" for="staff_category">Category of Staff *</label>
                           <select id="staff_category" name="staff_category" class="form-select" required>
                             <option value="">Select Category</option>
@@ -148,36 +148,10 @@
                           </select>
                         </div>
 
-                        <div class="col-md-4">
-                          <label class="form-label" for="year">Year *</label>
-                          <select id="year" name="year" class="form-select" required>
-                            <option value="">Select Year</option>
-                            <?php
-                              $current_year = date('Y');
-                              for($y = 2023; $y <= 2026; $y++){
-                                echo '<option value="'.$y.'" '.($y == $current_year ? 'selected' : '').'>'.$y.'</option>';
-                              }
-                            ?>
-                          </select>
-                        </div>
-
-                        <div class="col-md-4">
-                          <label class="form-label" for="month">Month *</label>
-                          <select id="month" name="month" class="form-select" required>
-                            <option value="">Select Month</option>
-                            <option value="1" <?=(date('n') == 1 ? 'selected' : '');?>>January</option>
-                            <option value="2" <?=(date('n') == 2 ? 'selected' : '');?>>February</option>
-                            <option value="3" <?=(date('n') == 3 ? 'selected' : '');?>>March</option>
-                            <option value="4" <?=(date('n') == 4 ? 'selected' : '');?>>April</option>
-                            <option value="5" <?=(date('n') == 5 ? 'selected' : '');?>>May</option>
-                            <option value="6" <?=(date('n') == 6 ? 'selected' : '');?>>June</option>
-                            <option value="7" <?=(date('n') == 7 ? 'selected' : '');?>>July</option>
-                            <option value="8" <?=(date('n') == 8 ? 'selected' : '');?>>August</option>
-                            <option value="9" <?=(date('n') == 9 ? 'selected' : '');?>>September</option>
-                            <option value="10" <?=(date('n') == 10 ? 'selected' : '');?>>October</option>
-                            <option value="11" <?=(date('n') == 11 ? 'selected' : '');?>>November</option>
-                            <option value="12" <?=(date('n') == 12 ? 'selected' : '');?>>December</option>
-                          </select>
+                        <div class="col-md-6">
+                          <label class="form-label" for="periodDisplay">Period</label>
+                          <input type="text" id="periodDisplay" class="form-control" value="" placeholder="Set by the dates of your entries" readonly tabindex="-1" />
+                          <div class="form-text">No need to pick a month: each entry's date decides it. Entries in different months become one timesheet per month.</div>
                         </div>
 
                         <div class="col-12">
@@ -270,8 +244,19 @@
                           </div>
                         </div>
 
+                        <!-- Which monthly timesheet(s) the entries make, from their dates -->
+                        <div class="col-12" id="monthSplit" style="display: none;">
+                          <div class="border rounded p-3">
+                            <div class="fw-semibold mb-2">
+                              <i class="ti ti-calendar me-1 text-primary"></i><span id="monthSplitTitle"></span>
+                            </div>
+                            <div id="monthSplitList" class="d-flex flex-wrap gap-2"></div>
+                            <div id="monthSplitWarning" class="text-danger small mt-2" style="display: none;"></div>
+                          </div>
+                        </div>
+
                         <div class="col-12">
-                          <button type="submit" class="btn btn-primary">
+                          <button type="submit" class="btn btn-primary" id="submitTimesheet">
                             <i class="ti ti-send me-1"></i> Submit Timesheet
                           </button>
                           <a href="<?=base_url();?>timesheets" class="btn btn-secondary">
@@ -344,6 +329,104 @@
     let entryCounter = 0;
     let excelEntries = [];
 
+    // A timesheet covers one month; the month comes from each entry's date
+    const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const takenMonths = <?=json_encode((object)($taken_months ?? array()), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
+    const ownUserId = <?=(int)($own_user_id ?? 0);?>;
+    const baseUrl = <?=json_encode(base_url(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);?>;
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function formatHours(h) {
+      return String(Math.round(h * 100) / 100);
+    }
+
+    function joinLabels(labels) {
+      return labels.length > 1 ? labels.slice(0, -1).join(', ') + ' and ' + labels[labels.length - 1] : (labels[0] || '');
+    }
+
+    function currentEntries() {
+      if ($('input[name="entry_mode"]:checked').val() === 'excel') {
+        return excelEntries.map(function(e) { return { date: e.date_raw, hours: parseFloat(e.hours) || 0 }; });
+      }
+      const list = [];
+      $('#entriesBody tr').each(function() {
+        list.push({
+          date: $(this).find('input[name="entry_date[]"]').val(),
+          hours: parseFloat($(this).find('.entry-hours').val()) || 0
+        });
+      });
+      return list;
+    }
+
+    function groupByMonth(entries) {
+      const hours = {};
+      entries.forEach(function(e) {
+        if (!(e.hours > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) return;
+        const key = e.date.slice(0, 7);
+        hours[key] = (hours[key] || 0) + e.hours;
+      });
+      return Object.keys(hours).sort().map(function(key) {
+        return { key: key, label: MONTH_NAMES[parseInt(key.slice(5), 10) - 1] + ' ' + key.slice(0, 4), hours: hours[key] };
+      });
+    }
+
+    function targetUserId() {
+      const chosen = parseInt($('#for_user_id').val(), 10);
+      return chosen > 0 ? chosen : ownUserId;
+    }
+
+    // Shows the period and which monthly timesheet(s) will be created; blocks months that already have one
+    function refreshPeriod() {
+      const months = groupByMonth(currentEntries());
+      const taken = takenMonths[targetUserId()] || {};
+      const clashes = [];
+      const $list = $('#monthSplitList').empty();
+
+      if (!months.length) {
+        $('#periodDisplay').val('');
+        $('#monthSplit').hide();
+        $('#submitTimesheet').prop('disabled', false);
+        return;
+      }
+
+      $('#periodDisplay').val(months.length === 1
+        ? months[0].label
+        : months[0].label + ' – ' + months[months.length - 1].label + ' (' + months.length + ' months)');
+      $('#monthSplitTitle').text(months.length === 1
+        ? 'These entries make one timesheet'
+        : 'These entries make ' + months.length + ' timesheets, one per month');
+
+      months.forEach(function(m) {
+        const existing = taken[m.key];
+        if (existing) {
+          clashes.push(m.label);
+          const editable = existing.status === 'draft' || existing.status === 'rejected';
+          $list.append($('<a class="badge bg-label-danger text-wrap text-start mw-100" target="_blank" rel="noopener"></a>')
+            .attr('href', baseUrl + (editable ? 'editTimesheet/' : 'viewTimesheet/') + existing.id)
+            .attr('title', editable ? 'Open it to change it' : 'Open it')
+            .text(m.label + ' · already has a timesheet (' + existing.status + ')'));
+        } else {
+          $list.append($('<span class="badge bg-label-primary text-wrap text-start mw-100"></span>').text(m.label + ' · ' + formatHours(m.hours) + ' h'));
+        }
+      });
+
+      if (clashes.length) {
+        $('#monthSplitWarning').text((clashes.length === 1
+          ? clashes[0] + ' already has a timesheet.'
+          : joinLabels(clashes) + ' already have timesheets.')
+          + ' Change the existing one instead, or remove those dates here.').show();
+      } else {
+        $('#monthSplitWarning').hide().text('');
+      }
+      $('#submitTimesheet').prop('disabled', clashes.length > 0);
+      $('#monthSplit').show();
+    }
+
     $(document).ready(function() {
       $('.select2').select2();
 
@@ -351,10 +434,12 @@
       $('#for_user_id').on('change', function(){
         var selected = $(this).find('option:selected');
         $('#displayName').val(selected.data('name') || selected.text().replace('(myself)', '').trim());
+        refreshPeriod();
       });
 
       // Add initial entry for manual mode
       addEntry();
+      $('#entriesBody').on('input change', 'input', refreshPeriod);
 
       // Handle mode toggle
       $('input[name="entry_mode"]').on('change', function() {
@@ -362,15 +447,16 @@
           $('#manualEntrySection').show();
           $('#excelUploadSection').hide();
           $('#excel_file').prop('required', false);
-          // Re-enable required on manual entry fields
-          $('#entriesTable input, #entriesTable select').prop('required', true);
+          // Re-enable the manual entry fields
+          $('#entriesTable input, #entriesTable select').prop('disabled', false).prop('required', true);
         } else {
           $('#manualEntrySection').hide();
           $('#excelUploadSection').show();
           $('#excel_file').prop('required', true);
-          // Disable required on manual entry fields when in Excel mode
-          $('#entriesTable input, #entriesTable select').prop('required', false);
+          // Manual rows are not sent in Excel mode
+          $('#entriesTable input, #entriesTable select').prop('required', false).prop('disabled', true);
         }
+        refreshPeriod();
       });
 
       // Handle Excel file upload and parsing
@@ -380,8 +466,8 @@
 
         const formData = new FormData();
         formData.append('excel_file', file);
-        formData.append('year', $('#year').val());
-        formData.append('month', $('#month').val());
+        excelEntries = [];
+        refreshPeriod();
 
         // Show loading with progress bar
         let progressHtml = '<div class="text-center p-4">';
@@ -426,10 +512,12 @@
               if (response.success) {
                 excelEntries = response.entries;
                 displayExcelPreview(response.entries, response.staff_info);
+                refreshPeriod();
 
-                // Auto-fill staff category if found
-                if (response.staff_info && response.staff_info.staff_category) {
-                  $('#staff_category').val(response.staff_info.staff_category);
+                // Auto-fill staff category if the file's value is one of the choices
+                const fileCategory = response.staff_info && response.staff_info.staff_category;
+                if (fileCategory && $('#staff_category option').filter(function() { return this.value === fileCategory; }).length) {
+                  $('#staff_category').val(fileCategory);
                 }
               } else {
                 let errorMsg = '<div class="alert alert-danger">' + response.message;
@@ -532,6 +620,7 @@
       $('#entry_' + id).remove();
       calculateTotal();
       renumberEntries();
+      refreshPeriod();
     }
 
     function renumberEntries() {
@@ -558,10 +647,10 @@
       let totalHours = 0;
       entries.forEach(function(entry) {
         html += '<tr>';
-        html += '<td>' + entry.date + '</td>';
-        html += '<td>' + entry.hours + '</td>';
-        html += '<td>' + entry.work_package + '</td>';
-        html += '<td>' + entry.comments + '</td>';
+        html += '<td>' + escapeHtml(entry.date) + '</td>';
+        html += '<td>' + escapeHtml(entry.hours) + '</td>';
+        html += '<td>' + escapeHtml(entry.work_package) + '</td>';
+        html += '<td>' + escapeHtml(entry.comments) + '</td>';
         html += '</tr>';
         totalHours += parseFloat(entry.hours);
       });
@@ -573,9 +662,9 @@
       if (staffInfo && (staffInfo.name || staffInfo.organization || staffInfo.staff_category)) {
         html += '<div class="alert alert-success mt-3">';
         html += '<strong>Extracted Staff Info:</strong><br>';
-        if (staffInfo.name) html += 'Name: ' + staffInfo.name + '<br>';
-        if (staffInfo.organization) html += 'Organization: ' + staffInfo.organization + '<br>';
-        if (staffInfo.staff_category) html += 'Category: ' + staffInfo.staff_category;
+        if (staffInfo.name) html += 'Name: ' + escapeHtml(staffInfo.name) + '<br>';
+        if (staffInfo.organization) html += 'Organization: ' + escapeHtml(staffInfo.organization) + '<br>';
+        if (staffInfo.staff_category) html += 'Category: ' + escapeHtml(staffInfo.staff_category);
         html += '</div>';
       }
 
@@ -585,6 +674,13 @@
     // Form validation before submit
     $('#newTimesheetForm').on('submit', function(e) {
       const mode = $('input[name="entry_mode"]:checked').val();
+
+      refreshPeriod();
+      if ($('#submitTimesheet').prop('disabled')) {
+        e.preventDefault();
+        alert($('#monthSplitWarning').text());
+        return false;
+      }
 
       if (mode === 'manual') {
         const entryCount = $('#entriesBody tr').length;
@@ -608,31 +704,16 @@
           return false;
         }
 
-        // Add excel entries as hidden inputs
+        // Add excel entries as hidden inputs (once, even if the form is submitted again)
+        $('#newTimesheetForm input.excel-entry').remove();
         excelEntries.forEach(function(entry, index) {
-          $('<input>').attr({
-            type: 'hidden',
-            name: 'entry_date[]',
-            value: entry.date_raw
-          }).appendTo('#newTimesheetForm');
-
-          $('<input>').attr({
-            type: 'hidden',
-            name: 'entry_hours[]',
-            value: entry.hours
-          }).appendTo('#newTimesheetForm');
-
-          $('<input>').attr({
-            type: 'hidden',
-            name: 'entry_work_package[]',
-            value: entry.work_package_code
-          }).appendTo('#newTimesheetForm');
-
-          $('<input>').attr({
-            type: 'hidden',
-            name: 'entry_description[]',
-            value: entry.comments
-          }).appendTo('#newTimesheetForm');
+          [['entry_date[]', entry.date_raw], ['entry_hours[]', entry.hours],
+           ['entry_work_package[]', entry.work_package_code], ['entry_description[]', entry.comments]
+          ].forEach(function(field) {
+            $('<input>').attr({ type: 'hidden', name: field[0], 'class': 'excel-entry' })
+              .val(field[1] == null ? '' : field[1])
+              .appendTo('#newTimesheetForm');
+          });
         });
       }
 

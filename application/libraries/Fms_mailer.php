@@ -98,6 +98,52 @@ class Fms_mailer {
         return true;
     }
 
+    /** Several monthly timesheets submitted at once (entries spanning months) — one email for all of them */
+    public function timesheets_submitted($timesheets, $submitter_name, $recipient_emails){
+        $timesheets = array_values((array)$timesheets);
+        if(!$timesheets){
+            return true;
+        }
+        $first = $timesheets[0];
+        $last  = $timesheets[count($timesheets) - 1];
+        $subject = count($timesheets) . ' Timesheets Submitted – ' . $submitter_name;
+        $app_url = $this->_app_url();
+
+        $months = '';
+        $total  = 0;
+        foreach($timesheets as $ts){
+            $total  += (float)$ts['total_hours'];
+            $months .= '<a href="' . $app_url . 'viewTimesheet/' . (int)$ts['timesheet_id'] . '" style="color:#696cff;text-decoration:none;">'
+                     . $this->_month_name($ts['month']) . ' ' . (int)$ts['year'] . '</a>'
+                     . ' &ndash; ' . number_format($ts['total_hours'], 2) . ' hrs<br>';
+        }
+
+        $body = $this->_wrap(
+            'Timesheets Submitted',
+            '#696cff',
+            '📋 Timesheets Awaiting Review',
+            "Timesheets for " . count($timesheets) . " months were submitted together and are awaiting your review. Each month is reviewed on its own.",
+            $this->_info_table([
+                'Staff Member'   => htmlspecialchars($submitter_name),
+                'Period'         => $this->_month_name($first['month']) . ' ' . (int)$first['year'] . ' to '
+                                  . $this->_month_name($last['month']) . ' ' . (int)$last['year'],
+                'Months'         => $months,
+                'Total Hours'    => number_format($total, 2) . ' hrs',
+                'Staff Category' => htmlspecialchars($first['staff_category'] ?? '—'),
+                'Submitted On'   => date('d M Y, H:i'),
+            ]),
+            'Review Timesheets',
+            $app_url . 'timesheets'
+        );
+
+        foreach((array)$recipient_emails as $email){
+            if(filter_var($email, FILTER_VALIDATE_EMAIL)){
+                $this->_send_notification($email, '', $subject, $body);
+            }
+        }
+        return true;
+    }
+
     /** Timesheet approved — notify the staff member */
     public function timesheet_approved($timesheet, $staff_email, $staff_name){
         $subject = 'Your Timesheet Has Been Approved – ' . $this->_month_name($timesheet['month']) . ' ' . $timesheet['year'];
