@@ -456,11 +456,12 @@ document.addEventListener('DOMContentLoaded', function (e) {
       }
     );
 
-    // Tagify
-    let formValidationLangTagify = new Tagify(formValidationLangEle);
-    formValidationLangEle.addEventListener('change', onChange);
-    function onChange() {
-      fv.revalidateField('formValidationLang');
+    // Tagify (template field; the expense form has none, which used to throw here)
+    if (formValidationLangEle && typeof Tagify !== 'undefined') {
+      new Tagify(formValidationLangEle);
+      formValidationLangEle.addEventListener('change', function () {
+        fv.revalidateField('formValidationLang');
+      });
     }
 
     //Bootstrap select

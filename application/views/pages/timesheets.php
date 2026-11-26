@@ -422,7 +422,7 @@
     <script src="<?=base_url();?>assets/vendor/libs/sweetalert2/sweetalert2.js"></script>
 
     <!-- Main JS -->
-    <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script src="<?=base_url();?>assets/js/main.js?v=<?=filemtime(FCPATH.'assets/js/main.js');?>"></script>
 
     <!-- Page JS -->
     <script>

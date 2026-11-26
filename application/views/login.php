@@ -178,7 +178,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 		<script src="<?=base_url();?>assets/vendor/libs/toastr/toastr.js"></script>
 
     <!-- Main JS -->
-    <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script src="<?=base_url();?>assets/js/main.js?v=<?=filemtime(FCPATH.'assets/js/main.js');?>"></script>
 
     <!-- Page JS -->
     <script src="<?=base_url();?>assets/js/pages-auth.js"></script>

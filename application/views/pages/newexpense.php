@@ -320,7 +320,7 @@
     <script src="<?=base_url();?>assets/vendor/libs/formvalidation/dist/js/plugins/AutoFocus.min.js"></script>
 
     <!-- Main JS -->
-    <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script src="<?=base_url();?>assets/js/main.js?v=<?=filemtime(FCPATH.'assets/js/main.js');?>"></script>
 
     <!-- Page JS -->
     <!-- Version in the URL so browsers load the new file whenever it changes -->

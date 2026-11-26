@@ -121,8 +121,9 @@ if (document.getElementById('layout-menu')) {
       }
       switchImage('dark');
     }
-  } else {
+  } else if (styleSwitcherToggleEl) {
     // Removed style switcher element if not using template customizer
+    // (FMS pages have no switcher; without this check the rest of this setup never ran)
     styleSwitcherToggleEl.parentElement.remove();
   }
 
@@ -138,7 +139,14 @@ if (document.getElementById('layout-menu')) {
   // Internationalization (Language Dropdown)
   // ---------------------------------------
 
-  if (typeof i18next !== 'undefined' && typeof i18NextHttpBackend !== 'undefined') {
+  // Only with a language dropdown: the FMS menu has none, and its data-i18n keys
+  // (OtherFiles, ReportSignatures, ...) are not in the template's locale files,
+  // so translating would replace the menu labels with the raw keys.
+  if (
+    typeof i18next !== 'undefined' &&
+    typeof i18NextHttpBackend !== 'undefined' &&
+    document.querySelector('.dropdown-language')
+  ) {
     i18next
       .use(i18NextHttpBackend)
       .init({

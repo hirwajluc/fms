@@ -495,7 +495,7 @@
     <script src="<?=base_url();?>assets/vendor/libs/node-waves/node-waves.js"></script>
     <script src="<?=base_url();?>assets/vendor/js/menu.js"></script>
     <script src="<?=base_url();?>assets/vendor/libs/datatables-bs5/datatables-bootstrap5.js"></script>
-    <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script src="<?=base_url();?>assets/js/main.js?v=<?=filemtime(FCPATH.'assets/js/main.js');?>"></script>
     <script src="<?=base_url();?>assets/js/file-preview.js?v=<?=filemtime(FCPATH . 'assets/js/file-preview.js');?>"></script>
     <script>
     // Partner filter: reload the page for the chosen partner

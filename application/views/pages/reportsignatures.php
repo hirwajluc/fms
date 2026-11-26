@@ -190,7 +190,7 @@
     <!-- endbuild -->
 
     <!-- Main JS -->
-    <script src="<?=base_url();?>assets/js/main.js"></script>
+    <script src="<?=base_url();?>assets/js/main.js?v=<?=filemtime(FCPATH.'assets/js/main.js');?>"></script>
 
   </body>
 </html>

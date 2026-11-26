@@ -30,14 +30,6 @@
                   <img src="<?=base_url();?>assets/img/branding/eu-co-funded.png" alt="Co-funded by the European Union" class="fms-eu-logo" />
                 </li>
 
-                <!-- Search -->
-                <li class="nav-item navbar-search-wrapper me-2 me-xl-0">
-                  <a class="nav-link search-toggler" href="javascript:void(0);">
-                    <i class="ti ti-search ti-md"></i>
-                  </a>
-                </li>
-                <!-- /Search -->
-
                 <!-- User -->
                 <li class="nav-item navbar-dropdown dropdown-user dropdown">
                   <a class="nav-link dropdown-toggle hide-arrow" href="javascript:void(0);" data-bs-toggle="dropdown">
@@ -90,16 +82,6 @@
                 </li>
                 <!--/ User -->
               </ul>
-            </div>
-
-            <!-- Search Small Screens -->
-            <div class="navbar-search-wrapper search-input-wrapper container-xxl d-none">
-              <input
-                type="text"
-                class="form-control search-input border-0"
-                placeholder="Search..."
-                aria-label="Search..." />
-              <i class="ti ti-x ti-sm search-toggler cursor-pointer"></i>
             </div>
           </div>
         </nav>
